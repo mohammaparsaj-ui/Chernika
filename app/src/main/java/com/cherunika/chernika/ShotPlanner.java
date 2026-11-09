@@ -25,11 +25,11 @@ final class ShotPlanner {
 
         ShotPlan best = null;
         for (Pocket pocket : frame.table.pockets()) {
-            ShotPlan direct = evaluate(frame, target, pocket, pocket.center, null, false);
+            ShotPlan direct = evaluate(frame, target, pocket, pocket.aimPoint, null, false);
             if (direct != null && (best == null || direct.score < best.score)) best = direct;
 
             for (int rail = 0; rail < 4; rail++) {
-                Vec2 virtualPocket = reflect(pocket.center, frame.table, rail);
+                Vec2 virtualPocket = reflect(pocket.aimPoint, frame.table, rail);
                 Vec2 bounce = railIntersection(target.center, virtualPocket, frame.table, rail);
                 if (bounce == null) continue;
                 ShotPlan bank = evaluate(frame, target, pocket, virtualPocket, bounce, true);
