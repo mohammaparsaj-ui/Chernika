@@ -8,6 +8,8 @@ This is a fresh, engine-only Android project. It does not import code from the o
 - Detects the live green-felt bounds and maps them into a table-relative coordinate frame.
 - Uses a measured Plato 9-ball calibration (720x1216 reference frame) for the outer rail envelope, four corner pockets, two side pockets and reference ball radius; all anchors scale with the detected felt bounds.
 - Exposes screen-to-table and table-to-screen transforms so shot geometry is independent of device resolution.
+- Scores direct, bank and combination routes in normalized table-width units; converts final aim points back to screenshot pixels only for Android gestures.
+- Uses the calibrated ball-radius prior to filter candidate ball components.
 - Rejects green regions with the wrong portrait-table aspect ratio or screenshots where the full rail envelope is clipped.
 - Detects candidate balls and the cue ball from the table image; attempts to read ball numbers from enlarged crops.
 - Plans unobstructed cue-to-object and object-to-pocket paths using ghost-ball geometry.
@@ -31,4 +33,4 @@ The app uses Accessibility screenshot and gesture APIs. Android will show the sy
 
 ## Build
 
-GitHub Actions builds `app-debug.apk` and runs unit tests. The workflow retains the APK artifact for 3 days to limit storage use. The artifact is a debug-signed APK intended for direct device testing, not Play Store release.
+GitHub Actions builds `app-debug.apk` and runs unit tests. The workflow retains the APK artifact for 1 day to limit storage use. The artifact is a debug-signed APK intended for direct device testing, not Play Store release.
