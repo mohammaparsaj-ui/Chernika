@@ -1,1 +1,1 @@
-Retry Chernika APK build using preinstalled Android SDK.
+Build with runner Gradle 9.8 and AGP 9.4.0.
