@@ -10,6 +10,7 @@ import java.util.List;
 final class VisionAnalyzer {
     private static final int MAX_ANALYSIS_WIDTH = 900;
     private final PowerBarReader powerReader = new PowerBarReader();
+    private final PocketVisionRefiner pocketRefiner = new PocketVisionRefiner();
 
     FrameState analyze(Bitmap source) {
         FrameState frame = new FrameState(source.getWidth(), source.getHeight());
@@ -83,6 +84,14 @@ final class VisionAnalyzer {
             return frame;
         }
 
+        PocketVisionRefiner.Result pocketResult =
+                pocketRefiner.refine(pixels, w, h, frame.table, sx, sy);
+        frame.refinedPocketCount = pocketResult.refinedCount;
+        frame.table = frame.table.withVisionRefinements(
+                pocketResult.pockets,
+                frame.table.referenceBallRadius,
+                frame.table.referenceBallRadiusUncertainty);
+
         if (feltSamples > 0) {
             int fr = (int) (red / feltSamples);
             int fg = (int) (green / feltSamples);
@@ -137,6 +146,8 @@ final class VisionAnalyzer {
         // large connected regions before treating them as ball candidates.
         double minDim = Math.max(4.0, expectedDiameter * 0.45);
         double maxDim = Math.max(minDim + 2.0, expectedDiameter * 1.35);
+        List<Double> observedRadii = new ArrayList<>();
+        scan:
         for (int y = top + 2; y < bottom - 2; y++) {
             for (int x = left + 2; x < right - 2; x++) {
                 int c = pixels[y * w + x];
@@ -178,8 +189,10 @@ final class VisionAnalyzer {
                 int bh = maxY - minY + 1;
                 double aspect = bw / (double) Math.max(1, bh);
                 double diameter = (bw + bh) / 2.0;
+                double fillRatio = count / (double) Math.max(1, bw * bh);
                 if (count < 5 || count > 900 || diameter < minDim || diameter > maxDim
-                        || aspect < 0.58 || aspect > 1.72) continue;
+                        || aspect < 0.58 || aspect > 1.72
+                        || fillRatio < 0.20 || fillRatio > 0.99) continue;
                 double cx = (minX + maxX) / 2.0 * sx;
                 double cy = (minY + maxY) / 2.0 * sy;
                 double radius = diameter * (sx + sy) / 4.0;
@@ -189,9 +202,19 @@ final class VisionAnalyzer {
                 boolean cue = avgHsv[1] < 0.28f && avgHsv[2] > 0.60f;
                 Ball ball = new Ball(new Vec2(cx, cy), radius, 0, cue);
                 frame.balls.add(ball);
+                observedRadii.add(radius);
                 if (cue && (frame.cueBall == null || avgHsv[2] > 0.65f)) frame.cueBall = ball;
-                if (frame.balls.size() >= 20) return;
+                if (frame.balls.size() >= 20) break scan;
             }
+        }
+
+        BallRadiusEstimator.Estimate estimate = BallRadiusEstimator.estimate(
+                observedRadii, frame.table.referenceBallRadius,
+                frame.table.referenceBallRadiusUncertainty);
+        if (estimate != null) {
+            frame.table = frame.table.withVisionRefinements(
+                    frame.table.pockets(), estimate.radius, estimate.uncertainty);
+            frame.ballRadiusRefined = true;
         }
     }
 }
