@@ -124,8 +124,12 @@ final class VisionAnalyzer {
                              double sx, double sy, int fr, int fg, int fb) {
         boolean[] mask = new boolean[w * h];
         boolean[] visited = new boolean[w * h];
-        double minDim = Math.max(4.0, (right - left) * 0.008);
-        double maxDim = Math.max(minDim + 2, (right - left) * 0.065);
+        double analysisScale = (sx + sy) / 2.0;
+        double expectedDiameter = 2.0 * frame.table.referenceBallRadius / analysisScale;
+        // Use the measured Plato ball-size prior to reject UI fragments and
+        // large connected regions before treating them as ball candidates.
+        double minDim = Math.max(4.0, expectedDiameter * 0.45);
+        double maxDim = Math.max(minDim + 2.0, expectedDiameter * 1.35);
         for (int y = top + 2; y < bottom - 2; y++) {
             for (int x = left + 2; x < right - 2; x++) {
                 int c = pixels[y * w + x];
