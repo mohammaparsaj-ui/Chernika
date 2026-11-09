@@ -7,10 +7,10 @@ import java.util.List;
 /**
  * Immutable, screen-space representation of the Plato table.
  *
- * The felt/cushion-nose rectangle is the coordinate frame. Pocket anchors,
- * outer rails and the reference ball radius are projected from normalized
- * Plato calibration coordinates, so geometry scales with the detected table
- * rather than relying on one device's screen pixels.
+ * The calibrated playable-boundary rectangle is the coordinate frame;
+ * detected green-felt bounds and the approximate outer-rail envelope remain
+ * separate. Pocket anchors, openings and the reference ball radius are
+ * projected from normalized coordinates so geometry scales across screens.
  */
 final class TableGeometry {
     static final class Bounds {
