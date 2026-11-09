@@ -22,6 +22,23 @@ public class ShotPlannerTest {
         assertNotNull(plan.pocket.id);
     }
 
+    @Test public void directShotGhostBallUsesBeyondCushionPocketEntryDirection() {
+        FrameState frame = new FrameState(1200, 1600);
+        frame.table = table();
+        frame.cueBall = new Ball(new Vec2(220, 600), 12, 0, true);
+        frame.balls.add(frame.cueBall);
+        frame.balls.add(new Ball(new Vec2(450, 600), 12, 1, false));
+
+        ShotPlan plan = new ShotPlanner().plan(frame, 1);
+        assertNotNull(plan);
+        assertFalse(plan.bankShot);
+        Vec2 intendedDirection = plan.pocket.aimPoint
+                .subtract(plan.target.center).normalized();
+        Vec2 ghostBallDirection = plan.target.center
+                .subtract(plan.aimPoint).normalized();
+        assertEquals(1.0, intendedDirection.dot(ghostBallDirection), 1e-6);
+    }
+
     private FrameState scaledFrame(double scale) {
         int screenWidth = (int) Math.round(1200 * scale);
         int screenHeight = (int) Math.round(1600 * scale);
