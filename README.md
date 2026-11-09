@@ -5,7 +5,10 @@ This is a fresh, engine-only Android project. It does not import code from the o
 ## Current raw-build scope
 
 - Reads the game's top-right target announcement with on-device ML Kit OCR (`Hit the X ball`, `Pocket the 9 ball`).
-- Estimates the table bounds and six pocket coordinates from the live screen; computes corner/side pocket capture radii from table width.
+- Detects the live green-felt bounds and maps them into a table-relative coordinate frame.
+- Uses a measured Plato 9-ball calibration (720x1216 reference frame) for the outer rail envelope, four corner pockets, two side pockets and reference ball radius; all anchors scale with the detected felt bounds.
+- Exposes screen-to-table and table-to-screen transforms so shot geometry is independent of device resolution.
+- Rejects green regions with the wrong portrait-table aspect ratio or screenshots where the full rail envelope is clipped.
 - Detects candidate balls and the cue ball from the table image; attempts to read ball numbers from enlarged crops.
 - Plans unobstructed cue-to-object and object-to-pocket paths using ghost-ball geometry.
 - Uses accessibility gestures to set the aim line and drag the detected power bar.
@@ -14,7 +17,7 @@ This is a fresh, engine-only Android project. It does not import code from the o
 
 ## Important prototype limits
 
-This is a first raw engine build, not a claim of verified full autonomous play. Plato's exact table colors, screen layout, aiming gesture, and power-bar behavior can vary by device and game version. The engine deliberately does not fire when it cannot confidently detect the table, cue ball, target ball, or power control. Bank shots, combo-shot planning, and reliable scratch placement require live-device calibration and testing before they can be considered complete.
+This is a first raw engine build, not a claim of verified full autonomous play. The first table calibration is reference-seeded from a manually measured 720x1216 gameplay frame. Felt bounds are detected live; pocket centers and rail offsets are projected from normalized reference coordinates. The cushion-nose rectangle currently uses the detected felt boundary as a first-pass approximation. Pocket mouth shapes, exact cushion-nose lines, ball radius and screen-to-game gesture alignment still require validation on additional devices and live gameplay recordings. Plato's exact table colors, screen layout, aiming gesture, and power-bar behavior can vary by device and game version. The engine deliberately does not fire when it cannot confidently detect the table, cue ball, target ball, or power control. Bank shots, combo-shot planning, and reliable scratch placement require live-device calibration and testing before they can be considered complete.
 
 ## Install and enable
 
