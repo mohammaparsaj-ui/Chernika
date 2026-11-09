@@ -1,4 +1,4 @@
-package com.cherunika;
+package com.cherunika.chernika;
 
 final class Pocket {
     enum Id {
