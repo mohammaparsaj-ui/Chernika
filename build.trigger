@@ -1,1 +1,1 @@
-Retry Chernika APK build after workflow correction.
+Retry Chernika APK build using preinstalled Android SDK.
