@@ -215,6 +215,16 @@ final class PoolPhysics {
                 cushionContacts += railHits;
                 if (!body.active()) continue;
 
+                if (body.x < frame.table.left - body.radius
+                        || body.x > frame.table.right + body.radius
+                        || body.y < frame.table.top - body.radius
+                        || body.y > frame.table.bottom + body.radius) {
+                    body.offTable = true;
+                    body.vx = 0;
+                    body.vy = 0;
+                    continue;
+                }
+
                 double currentSpeed = body.speed();
                 if (currentSpeed > 0) {
                     double nextSpeed = Math.max(0.0, currentSpeed - rollingDeceleration * TIME_STEP_SECONDS);
