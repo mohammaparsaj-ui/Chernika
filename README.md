@@ -36,4 +36,4 @@ The app uses Accessibility screenshot and gesture APIs. Android will show the sy
 
 ## Build
 
-GitHub Actions builds `app-debug.apk` and runs unit tests. The workflow retains the APK artifact for 1 day to limit storage use. The artifact is a debug-signed APK intended for direct device testing, not Play Store release.
+GitHub Actions builds `app-debug.apk` and runs unit tests. The workflow retains the APK artifact for 7 days to limit storage use. The artifact is a debug-signed APK intended for direct device testing, not Play Store release.
