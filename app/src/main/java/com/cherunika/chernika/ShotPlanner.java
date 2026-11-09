@@ -49,15 +49,15 @@ final class ShotPlanner {
         ShotPlan best = null;
         for (Pocket pocket : frame.table.pockets()) {
             if (!clearPath(nine.center, pocket.center, frame.balls, nine, first, nine.radius * 2.0)) continue;
-            double cueDistance = frame.cueBall.center.distance(ghost);
-            double comboDistance = first.center.distance(nine.center);
-            double nineDistance = nine.center.distance(pocket.center);
+            double cueDistance = tableDistance(frame.table, frame.cueBall.center, ghost);
+            double comboDistance = tableDistance(frame.table, first.center, nine.center);
+            double nineDistance = tableDistance(frame.table, nine.center, pocket.center);
             double angle = Math.acos(Math.max(-1, Math.min(1,
                     ghost.subtract(frame.cueBall.center).normalized().dot(firstToNine))));
             double score = cueDistance + comboDistance * 0.9 + nineDistance * 0.78
-                    + angle * frame.table.width * 0.48 + frame.table.width * 0.12;
+                    + angle * 0.48 + 0.12;
             double power = Math.max(30, Math.min(92,
-                    28 + (cueDistance + comboDistance + nineDistance * 0.65) / frame.table.width * 62 + angle * 8));
+                    28 + (cueDistance + comboDistance + nineDistance * 0.65) * 62 + angle * 8));
             ShotPlan candidate = new ShotPlan(first, ghost, pocket, power, score, false, false, true);
             if (best == null || candidate.score < best.score) best = candidate;
         }
@@ -120,23 +120,37 @@ final class ShotPlanner {
         double objectDistance;
         if (!bank) {
             if (!clearPath(target.center, pocket.center, frame.balls, target, frame.cueBall, target.radius * 2.05)) return null;
-            objectDistance = target.center.distance(pocket.center);
+            objectDistance = tableDistance(frame.table, target.center, pocket.center);
         } else {
             if (bounce == null || !clearPath(target.center, bounce, frame.balls, target, frame.cueBall, target.radius * 2.05)
                     || !clearPath(bounce, pocket.center, frame.balls, target, frame.cueBall, target.radius * 2.05)) return null;
-            objectDistance = target.center.distance(bounce) + bounce.distance(pocket.center);
+            objectDistance = tableDistance(frame.table, target.center, bounce)
+                    + tableDistance(frame.table, bounce, pocket.center);
         }
 
         Vec2 cueVector = ghost.subtract(frame.cueBall.center).normalized();
         Vec2 objectVector = targetVector;
         double dot = Math.max(-1, Math.min(1, cueVector.dot(objectVector)));
         double cutAngle = Math.acos(dot);
-        double cueDistance = frame.cueBall.center.distance(ghost);
-        double score = cueDistance + objectDistance * 0.72 + cutAngle * frame.table.width * 0.42
-                + (bank ? frame.table.width * 0.24 : 0);
+        double cueDistance = tableDistance(frame.table, frame.cueBall.center, ghost);
+        double score = cueDistance + objectDistance * 0.72 + cutAngle * 0.42
+                + (bank ? 0.24 : 0);
         double power = Math.max(24, Math.min(94,
-                24 + (cueDistance + objectDistance * 0.55) / frame.table.width * 68 + cutAngle * 8 + (bank ? 6 : 0)));
+                24 + (cueDistance + objectDistance * 0.55) * 68 + cutAngle * 8 + (bank ? 6 : 0)));
         return new ShotPlan(target, ghost, pocket, power, score, false, bank, false);
+    }
+
+    /**
+     * Euclidean distance expressed in table-width units. This keeps route
+     * scores and power estimates stable when the same table is rendered at a
+     * different Android resolution or screenshot scale.
+     */
+    private double tableDistance(TableGeometry table, Vec2 a, Vec2 b) {
+        Vec2 na = table.screenToTable(a);
+        Vec2 nb = table.screenToTable(b);
+        double dx = na.x - nb.x;
+        double dy = (na.y - nb.y) * (table.height / table.width);
+        return Math.hypot(dx, dy);
     }
 
     private Vec2 reflect(Vec2 pocket, TableGeometry table, int rail) {
