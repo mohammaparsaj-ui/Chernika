@@ -128,9 +128,9 @@ final class PocketVisionRefiner {
             double distance = Math.hypot(dx, dy);
             double maxDistance = Math.min(expectedWidthPx, expectedHeightPx) * 0.42;
 
-            if (areaRatio < 0.12 || areaRatio > 1.65
-                    || ratioX < 0.45 || ratioX > 1.55
-                    || ratioY < 0.45 || ratioY > 1.55
+            if (areaRatio < 0.24 || areaRatio > 1.65
+                    || ratioX < 0.55 || ratioX > 1.55
+                    || ratioY < 0.55 || ratioY > 1.55
                     || fill < 0.28 || fill > 0.99
                     || distance > maxDistance) {
                 continue;
