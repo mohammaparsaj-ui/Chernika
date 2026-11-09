@@ -312,7 +312,10 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         if (!announcement.hasTarget()) return "Table detected; " + objectBalls + " ball candidates. Checking for the opening rack.";
         return "Table detected; target: Hit " + announcement.legalBall
                 + " · pocket objective: " + (announcement.objectiveBall == 0 ? "not read" : announcement.objectiveBall)
-                + " · ball candidates: " + objectBalls + (frame.powerBar == null ? " · power bar not found" : " · power bar found");
+                + " · ball candidates: " + objectBalls
+                + " · pocket vision: " + frame.refinedPocketCount + "/6"
+                + (frame.ballRadiusRefined ? " · ball scale refined" : " · ball scale uses reference")
+                + (frame.powerBar == null ? " · power bar not found" : " · power bar found");
     }
 
     private void setStatus(String message) {
