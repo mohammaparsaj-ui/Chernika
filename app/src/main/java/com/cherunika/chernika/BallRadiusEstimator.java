@@ -44,7 +44,7 @@ final class BallRadiusEstimator {
         // Reject a frame when the candidate components disagree too much to
         // represent one physical ball size.
         if (median < priorRadius * 0.75 || median > priorRadius * 1.30
-                || mad > median * 0.18) {
+                || mad > median * 0.12) {
             return null;
         }
 
