@@ -70,6 +70,24 @@ public class PoolPhysicsTest {
         assertFalse(result.cueScratch);
     }
 
+    @Test public void ballEnteringCornerPocketIsCaptured() {
+        TableGeometry table = table();
+        Pocket pocket = table.pocket(Pocket.Id.TOP_LEFT);
+        Vec2 targetPosition = new Vec2(
+                pocket.center.x + 60, pocket.center.y + 60);
+        FrameState frame = frameWithCue(new Vec2(
+                targetPosition.x + 50, targetPosition.y + 50));
+        Ball target = new Ball(targetPosition, frame.cueBall.radius, 1, false);
+        frame.balls.add(target);
+
+        PoolPhysics.Result result = new PoolPhysics().simulate(
+                frame, new Vec2(-1, -1), 40.0);
+
+        assertSame(target, result.firstContactBall);
+        assertTrue(result.pocketed(target));
+        assertTrue(result.pocketedNumber(1));
+    }
+
     @Test public void cueBallPocketingIsReportedAsScratch() {
         TableGeometry table = table();
         Pocket pocket = table.pocket(Pocket.Id.MIDDLE_RIGHT);
