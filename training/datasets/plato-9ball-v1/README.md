@@ -9,7 +9,7 @@ Files:
 - shots.jsonl — 11 shot/partial-shot samples with task-specific eligibility flags.
 - events.jsonl — HUD, pocket, foul, scratch, turn and win events.
 - power-calibration.json — user-confirmed maximum-power mapping and legacy interval.
-- geometry-reference.json — prior table bounds and six pocket centers.
+- geometry-reference.json — re-extracted table bounds and six pocket centers in original-frame pixels.
 - validate_dataset.py — structural and leakage checks.
 
 Splits are grouped by recording:
