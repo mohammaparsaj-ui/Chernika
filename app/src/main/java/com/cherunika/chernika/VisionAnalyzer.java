@@ -73,7 +73,15 @@ final class VisionAnalyzer {
 
         double sx = source.getWidth() / (double) w;
         double sy = source.getHeight() / (double) h;
-        frame.table = new TableGeometry(left * sx, top * sy, right * sx, bottom * sy);
+        try {
+            frame.table = PlatoTableCalibration.fromDetectedFeltBounds(
+                    left * sx, top * sy, right * sx, bottom * sy,
+                    source.getWidth(), source.getHeight());
+        } catch (IllegalArgumentException invalidGeometry) {
+            // Never let a weak green-region match become a shot-planning surface.
+            scaled.recycle();
+            return frame;
+        }
 
         if (feltSamples > 0) {
             int fr = (int) (red / feltSamples);
