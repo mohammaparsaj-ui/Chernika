@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'Chernika_Raw_Source.zip'
       - 'chernika-raw-source.zip'
       - 'build.trigger'
       - 'app/**'
@@ -29,12 +30,18 @@ jobs:
 
       - name: Expand uploaded raw source archive
         run: |
-          if [ -f chernika-raw-source.zip ]; then
+          if [ -f Chernika_Raw_Source.zip ]; then
+            unzip -oq Chernika_Raw_Source.zip -d .
+            rm Chernika_Raw_Source.zip
+          elif [ -f chernika-raw-source.zip ]; then
             unzip -oq chernika-raw-source.zip -d .
             rm chernika-raw-source.zip
           elif compgen -G 'source_chunks/chunk*.txt' > /dev/null; then
             cat source_chunks/chunk*.txt | tr -d '\n' | base64 -d > /tmp/chernika-raw-source.zip
             unzip -oq /tmp/chernika-raw-source.zip -d .
+          else
+            echo "No Chernika source archive found" >&2
+            exit 1
           fi
           rm -rf source_chunks build.trigger
           git config user.name "github-actions[bot]"
