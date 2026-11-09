@@ -36,6 +36,7 @@ final class PlatoTableCalibration {
 
     // Hough-circle median from the reference frame: 13 +/- 2 px.
     private static final double BALL_RADIUS_U = 13.0 / REFERENCE_FELT_WIDTH;
+    private static final double BALL_RADIUS_UNCERTAINTY_U = 2.0 / REFERENCE_FELT_WIDTH;
 
     private static final Anchor[] POCKET_ANCHORS = {
             new Anchor(Pocket.Id.TOP_LEFT,
@@ -107,6 +108,7 @@ final class PlatoTableCalibration {
         double aspectFit = Math.max(0.0,
                 1.0 - Math.abs(aspect - EXPECTED_ASPECT_RATIO) / 0.09);
         double ballRadius = BALL_RADIUS_U * felt.width;
+        double ballRadiusUncertainty = BALL_RADIUS_UNCERTAINTY_U * felt.width;
 
         // Until an image-based cushion-nose detector is added, the green-cloth
         // boundary is the explicit first-pass approximation for the nose line.
@@ -114,7 +116,8 @@ final class PlatoTableCalibration {
                 felt.left, felt.top, felt.right, felt.bottom);
 
         return new TableGeometry(
-                outer, felt, cushionNose, ballRadius, aspectFit, ID, pockets);
+                outer, felt, cushionNose, ballRadius, ballRadiusUncertainty,
+                aspectFit, ID, pockets);
     }
 
     private static final class Anchor {
