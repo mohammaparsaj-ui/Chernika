@@ -44,11 +44,11 @@ final class TableGeometry {
     final Bounds outerRailBounds;
     /** Green-cloth mask bounds detected from the screenshot. */
     final Bounds feltBounds;
-    /** First-pass cushion-nose rectangle; currently seeded from felt bounds. */
+    /** First-pass playable-boundary estimate; exact felt-edge/nose semantics remain unverified. */
     final Bounds cushionNoseBounds;
 
-    // Compatibility aliases used by the shot planner. These are cushion-nose
-    // coordinates, not outer-rail coordinates.
+    // Compatibility aliases used by the shot planner. These are playable
+    // boundary coordinates, not felt-mask or outer-rail coordinates.
     final double left;
     final double top;
     final double right;
@@ -93,9 +93,9 @@ final class TableGeometry {
     }
 
     /**
-     * Tests whether a point lies inside the cushion-nose rectangle after
-     * applying a pixel margin. Positive margins keep a ball/ghost center away
-     * from the cushion; negative margins are permitted for diagnostics only.
+     * Tests whether a point lies inside the calibrated playable boundary
+     * after applying a pixel margin. Positive margins keep a ball/ghost center
+     * away from the edge; negative margins are permitted for diagnostics only.
      */
     boolean contains(Vec2 point, double margin) {
         return point != null
@@ -103,7 +103,7 @@ final class TableGeometry {
                 && point.y >= top + margin && point.y <= bottom - margin;
     }
 
-    /** Convert screenshot pixels to table-relative coordinates; corners are (0,0) and (1,1). */
+    /** Convert screenshot pixels to playable-boundary coordinates; corners are (0,0) and (1,1). */
     Vec2 screenToTable(Vec2 screenPoint) {
         if (screenPoint == null) throw new IllegalArgumentException("screenPoint is required");
         return new Vec2((screenPoint.x - left) / width, (screenPoint.y - top) / height);
