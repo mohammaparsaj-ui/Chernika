@@ -1,0 +1,43 @@
+{
+  "schema": "chernika.plato9ball.geometry.v1",
+  "recording_id": "plato_1000323339",
+  "coordinate_frame": {
+    "origin": "top_left_of_720x1216_frame",
+    "units": "pixels"
+  },
+  "table_bounds": {
+    "left": 112,
+    "right": 496,
+    "top": 158,
+    "bottom": 905,
+    "status": "prior-derived; pending independent re-extraction"
+  },
+  "ball_radius_px": 11.13,
+  "pockets": {
+    "top_left": [
+      118.1,
+      163.2
+    ],
+    "top_right": [
+      489.9,
+      163.2
+    ],
+    "middle_left": [
+      108.2,
+      531.5
+    ],
+    "middle_right": [
+      499.8,
+      531.5
+    ],
+    "bottom_left": [
+      118.1,
+      899.8
+    ],
+    "bottom_right": [
+      489.9,
+      899.8
+    ]
+  },
+  "note": "Reference geometry for one screen layout; not universal across devices."
+}
