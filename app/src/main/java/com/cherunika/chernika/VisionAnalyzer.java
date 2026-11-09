@@ -58,7 +58,7 @@ final class VisionAnalyzer {
         int maxRow = max(rows);
         int maxCol = max(cols);
         if (maxRow < w * 0.18 || maxCol < h * 0.18) {
-            scaled.recycle();
+            recycleAnalysisBitmap(scaled, source);
             return frame;
         }
         int top = firstAbove(rows, Math.max(8, (int) (maxRow * 0.30)));
@@ -67,7 +67,7 @@ final class VisionAnalyzer {
         int right = lastAbove(cols, Math.max(8, (int) (maxCol * 0.30)));
         if (left < 0 || top < 0 || right <= left || bottom <= top
                 || right - left < w * 0.42 || bottom - top < h * 0.25) {
-            scaled.recycle();
+            recycleAnalysisBitmap(scaled, source);
             return frame;
         }
 
@@ -79,7 +79,7 @@ final class VisionAnalyzer {
                     source.getWidth(), source.getHeight());
         } catch (IllegalArgumentException invalidGeometry) {
             // Never let a weak green-region match become a shot-planning surface.
-            scaled.recycle();
+            recycleAnalysisBitmap(scaled, source);
             return frame;
         }
 
@@ -89,8 +89,15 @@ final class VisionAnalyzer {
             int fb = (int) (blue / feltSamples);
             detectBalls(frame, pixels, w, h, left, top, right, bottom, sx, sy, fr, fg, fb);
         }
-        scaled.recycle();
+        recycleAnalysisBitmap(scaled, source);
         return frame;
+    }
+
+    private void recycleAnalysisBitmap(Bitmap scaled, Bitmap source) {
+        // Android may return the source object unchanged when no resize is
+        // needed. Never recycle the caller-owned screenshot bitmap: the
+        // accessibility service still needs it for OCR crops after analysis.
+        if (scaled != source && !scaled.isRecycled()) scaled.recycle();
     }
 
     private boolean isFelt(float[] hsv, float dominantHue) {
