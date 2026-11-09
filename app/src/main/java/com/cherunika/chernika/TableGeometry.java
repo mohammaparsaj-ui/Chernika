@@ -119,6 +119,18 @@ final class TableGeometry {
         return pockets;
     }
 
+    /** Return a new immutable geometry with validated per-frame vision refinements. */
+    TableGeometry withVisionRefinements(List<Pocket> refinedPockets,
+                                        double ballRadius, double ballRadiusUncertainty) {
+        List<Pocket> nextPockets = refinedPockets == null ? pockets : refinedPockets;
+        double nextRadius = isFinite(ballRadius) && ballRadius > 0
+                ? ballRadius : referenceBallRadius;
+        double nextUncertainty = isFinite(ballRadiusUncertainty) && ballRadiusUncertainty >= 0
+                ? ballRadiusUncertainty : referenceBallRadiusUncertainty;
+        return new TableGeometry(outerRailBounds, feltBounds, cushionNoseBounds,
+                nextRadius, nextUncertainty, aspectRatioFit, calibrationId, nextPockets);
+    }
+
     Pocket pocket(Pocket.Id id) {
         if (id == null) return null;
         for (Pocket pocket : pockets) if (pocket.id == id) return pocket;
