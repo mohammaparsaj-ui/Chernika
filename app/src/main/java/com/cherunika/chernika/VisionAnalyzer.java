@@ -10,6 +10,7 @@ import java.util.List;
 final class VisionAnalyzer {
     private static final int MAX_ANALYSIS_WIDTH = 900;
     private final PowerBarReader powerReader = new PowerBarReader();
+    private final PocketVisionRefiner pocketRefiner = new PocketVisionRefiner();
 
     FrameState analyze(Bitmap source) {
         FrameState frame = new FrameState(source.getWidth(), source.getHeight());
@@ -58,7 +59,7 @@ final class VisionAnalyzer {
         int maxRow = max(rows);
         int maxCol = max(cols);
         if (maxRow < w * 0.18 || maxCol < h * 0.18) {
-            scaled.recycle();
+            recycleAnalysisBitmap(scaled, source);
             return frame;
         }
         int top = firstAbove(rows, Math.max(8, (int) (maxRow * 0.30)));
@@ -67,13 +68,29 @@ final class VisionAnalyzer {
         int right = lastAbove(cols, Math.max(8, (int) (maxCol * 0.30)));
         if (left < 0 || top < 0 || right <= left || bottom <= top
                 || right - left < w * 0.42 || bottom - top < h * 0.25) {
-            scaled.recycle();
+            recycleAnalysisBitmap(scaled, source);
             return frame;
         }
 
         double sx = source.getWidth() / (double) w;
         double sy = source.getHeight() / (double) h;
-        frame.table = new TableGeometry(left * sx, top * sy, right * sx, bottom * sy);
+        try {
+            frame.table = PlatoTableCalibration.fromDetectedFeltBounds(
+                    left * sx, top * sy, right * sx, bottom * sy,
+                    source.getWidth(), source.getHeight());
+        } catch (IllegalArgumentException invalidGeometry) {
+            // Never let a weak green-region match become a shot-planning surface.
+            recycleAnalysisBitmap(scaled, source);
+            return frame;
+        }
+
+        PocketVisionRefiner.Result pocketResult =
+                pocketRefiner.refine(pixels, w, h, frame.table, sx, sy);
+        frame.refinedPocketCount = pocketResult.refinedCount;
+        frame.table = frame.table.withVisionRefinements(
+                pocketResult.pockets,
+                frame.table.referenceBallRadius,
+                frame.table.referenceBallRadiusUncertainty);
 
         if (feltSamples > 0) {
             int fr = (int) (red / feltSamples);
@@ -81,8 +98,15 @@ final class VisionAnalyzer {
             int fb = (int) (blue / feltSamples);
             detectBalls(frame, pixels, w, h, left, top, right, bottom, sx, sy, fr, fg, fb);
         }
-        scaled.recycle();
+        recycleAnalysisBitmap(scaled, source);
         return frame;
+    }
+
+    private void recycleAnalysisBitmap(Bitmap scaled, Bitmap source) {
+        // Android may return the source object unchanged when no resize is
+        // needed. Never recycle the caller-owned screenshot bitmap: the
+        // accessibility service still needs it for OCR crops after analysis.
+        if (scaled != source && !scaled.isRecycled()) scaled.recycle();
     }
 
     private boolean isFelt(float[] hsv, float dominantHue) {
@@ -116,8 +140,13 @@ final class VisionAnalyzer {
                              double sx, double sy, int fr, int fg, int fb) {
         boolean[] mask = new boolean[w * h];
         boolean[] visited = new boolean[w * h];
-        double minDim = Math.max(4.0, (right - left) * 0.008);
-        double maxDim = Math.max(minDim + 2, (right - left) * 0.065);
+        double analysisScale = (sx + sy) / 2.0;
+        double expectedDiameter = 2.0 * frame.table.referenceBallRadius / analysisScale;
+        // Use the measured Plato ball-size prior to reject UI fragments and
+        // large connected regions before treating them as ball candidates.
+        double minDim = Math.max(4.0, expectedDiameter * 0.45);
+        double maxDim = Math.max(minDim + 2.0, expectedDiameter * 1.35);
+        List<Double> observedRadii = new ArrayList<>();
         for (int y = top + 2; y < bottom - 2; y++) {
             for (int x = left + 2; x < right - 2; x++) {
                 int c = pixels[y * w + x];
@@ -131,6 +160,7 @@ final class VisionAnalyzer {
         int[] dx = {1, -1, 0, 0};
         int[] dy = {0, 0, 1, -1};
         ArrayDeque<Integer> queue = new ArrayDeque<>();
+        scan:
         for (int y = top + 2; y < bottom - 2; y++) {
             for (int x = left + 2; x < right - 2; x++) {
                 int index = y * w + x;
@@ -159,8 +189,10 @@ final class VisionAnalyzer {
                 int bh = maxY - minY + 1;
                 double aspect = bw / (double) Math.max(1, bh);
                 double diameter = (bw + bh) / 2.0;
+                double fillRatio = count / (double) Math.max(1, bw * bh);
                 if (count < 5 || count > 900 || diameter < minDim || diameter > maxDim
-                        || aspect < 0.58 || aspect > 1.72) continue;
+                        || aspect < 0.58 || aspect > 1.72
+                        || fillRatio < 0.20 || fillRatio > 0.99) continue;
                 double cx = (minX + maxX) / 2.0 * sx;
                 double cy = (minY + maxY) / 2.0 * sy;
                 double radius = diameter * (sx + sy) / 4.0;
@@ -170,9 +202,19 @@ final class VisionAnalyzer {
                 boolean cue = avgHsv[1] < 0.28f && avgHsv[2] > 0.60f;
                 Ball ball = new Ball(new Vec2(cx, cy), radius, 0, cue);
                 frame.balls.add(ball);
+                observedRadii.add(radius);
                 if (cue && (frame.cueBall == null || avgHsv[2] > 0.65f)) frame.cueBall = ball;
-                if (frame.balls.size() >= 20) return;
+                if (frame.balls.size() >= 20) break scan;
             }
+        }
+
+        BallRadiusEstimator.Estimate estimate = BallRadiusEstimator.estimate(
+                observedRadii, frame.table.referenceBallRadius,
+                frame.table.referenceBallRadiusUncertainty);
+        if (estimate != null) {
+            frame.table = frame.table.withVisionRefinements(
+                    frame.table.pockets(), estimate.radius, estimate.uncertainty);
+            frame.ballRadiusRefined = true;
         }
     }
 }

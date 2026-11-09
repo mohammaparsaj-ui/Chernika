@@ -9,6 +9,8 @@ final class FrameState {
     final List<Ball> balls = new ArrayList<>();
     Ball cueBall;
     PowerBar powerBar;
+    int refinedPocketCount;
+    boolean ballRadiusRefined;
 
     FrameState(int screenWidth, int screenHeight) {
         this.screenWidth = screenWidth;
