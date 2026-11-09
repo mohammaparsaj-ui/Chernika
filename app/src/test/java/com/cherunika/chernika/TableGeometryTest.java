@@ -55,6 +55,7 @@ public class TableGeometryTest {
         assertEquals(379.0, table.width, 1e-6);
         assertEquals(743.0, table.height, 1e-6);
         assertEquals(11.0, table.referenceBallRadius, 0.05);
+        assertEquals(1.7, table.referenceBallRadiusUncertainty, 0.05);
         assertEquals(81.1, table.outerRailBounds.left, 0.2);
         assertEquals(528.0, table.outerRailBounds.right, 0.2);
         assertEquals(127.7, table.outerRailBounds.top, 0.2);
