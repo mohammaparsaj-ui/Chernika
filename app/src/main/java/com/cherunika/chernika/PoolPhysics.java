@@ -13,13 +13,22 @@ import java.util.List;
  * physics; those require measurements from live gameplay recordings.
  */
 final class PoolPhysics {
-    private static final double TIME_STEP_SECONDS = 1.0 / 120.0;
-    private static final double MAX_SIMULATION_SECONDS = 8.0;
-    private static final double BALL_RESTITUTION = 0.96;
-    private static final double RAIL_RESTITUTION = 0.84;
-    private static final double ROLLING_DECELERATION_PER_RADIUS = 2.2;
-    private static final double SPEED_PER_RADIUS_AT_ZERO_POWER = 2.5;
-    private static final double SPEED_PER_RADIUS_PER_POWER = 0.195;
+    private static final double TIME_STEP_SECONDS = 1.0 / 240.0;
+    private static final double MAX_SIMULATION_SECONDS = 40.0;
+
+    // Candidate measurements from the existing 2026-10-30 Plato recording.
+    // Keep these provisional until replayed against more shots.
+    private static final double BALL_RESTITUTION = 0.946;
+    private static final double RAIL_RESTITUTION = 0.815;
+    private static final double ROLLING_RESISTANCE_COEFFICIENT = 0.0079;
+    private static final double MAX_CUE_SPEED_METERS_PER_SECOND = 2.667;
+    private static final double MAX_UI_POWER_PERCENT = 97.8;
+
+    // The calibrated portrait table is consistent with an approximately
+    // 0.99 m x 1.98 m playing surface (7-foot table proportions).
+    private static final double TABLE_WIDTH_METERS = 0.99;
+    private static final double TABLE_LENGTH_METERS = 1.98;
+    private static final double GRAVITY_METERS_PER_SECOND_SQUARED = 9.81;
     private static final double MIN_MOVING_SPEED_PER_RADIUS = 0.05;
     private static final double MIN_COLLISION_SPEED_PER_RADIUS = 0.08;
 
@@ -136,13 +145,16 @@ final class PoolPhysics {
 
         double power = clamp(powerPercent, 0.0, 100.0);
         double radius = cue.radius;
-        double speed = power <= 0 ? 0
-                : (SPEED_PER_RADIUS_AT_ZERO_POWER + SPEED_PER_RADIUS_PER_POWER * power) * radius;
+        double pixelsPerMeter = pixelsPerMeter(frame.table);
+        // The user's 97.8% slider reading represents maximum power.
+        double normalizedPower = Math.min(1.0, power / MAX_UI_POWER_PERCENT);
+        double speed = normalizedPower * MAX_CUE_SPEED_METERS_PER_SECOND * pixelsPerMeter;
         Vec2 direction = cueDirection.normalized();
         cue.vx = direction.x * speed;
         cue.vy = direction.y * speed;
 
-        double rollingDeceleration = ROLLING_DECELERATION_PER_RADIUS * radius;
+        double rollingDeceleration = ROLLING_RESISTANCE_COEFFICIENT
+                * GRAVITY_METERS_PER_SECOND_SQUARED * pixelsPerMeter;
         double stopSpeed = Math.max(0.25, radius * MIN_MOVING_SPEED_PER_RADIUS);
         double collisionSpeed = Math.max(0.25, radius * MIN_COLLISION_SPEED_PER_RADIUS);
         Ball firstContactBall = null;
@@ -358,6 +370,12 @@ final class PoolPhysics {
             }
         }
         return false;
+    }
+
+    private double pixelsPerMeter(TableGeometry table) {
+        double horizontalScale = table.width / TABLE_WIDTH_METERS;
+        double verticalScale = table.height / TABLE_LENGTH_METERS;
+        return (horizontalScale + verticalScale) * 0.5;
     }
 
     private boolean allBodiesStopped(List<Body> bodies, double stopSpeed) {
