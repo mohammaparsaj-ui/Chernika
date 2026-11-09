@@ -1,0 +1,65 @@
+name: Build Chernika raw Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'build.trigger'
+      - 'app/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'README.md'
+  workflow_dispatch:
+
+concurrency:
+  group: chernika-raw-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Expand source bundle and remove transfer chunks
+        run: |
+          cat source_chunks/chunk*.txt | tr -d '\n' | base64 -d > /tmp/chernika-raw-source.zip
+          unzip -oq /tmp/chernika-raw-source.zip -d .
+          rm -rf source_chunks build.trigger
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Add Chernika raw engine Android source"
+            git push origin HEAD:main
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Run unit tests and assemble raw APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Publish installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chernika-Raw-Engine-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
