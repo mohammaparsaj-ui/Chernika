@@ -1,43 +1,18 @@
 {
-  "schema": "chernika.plato9ball.geometry.v1",
+  "schema": "chernika.plato9ball.geometry.v2",
   "recording_id": "plato_1000323339",
-  "coordinate_frame": {
-    "origin": "top_left_of_720x1216_frame",
-    "units": "pixels"
+  "source_frame": {"time_s": 8.1, "resolution": [720, 1216]},
+  "coordinate_frame": {"origin": "top_left_of_original_video_frame", "units": "pixels"},
+  "outer_rail_bounds": {"left": 96, "right": 623, "top": 156, "bottom": 1110, "status": "approximate_visual_measurement"},
+  "felt_bounds": {"left": 136, "right": 583, "top": 194, "bottom": 1069, "status": "green_felt_mask_measurement"},
+  "ball_radius_px": {"estimate": 13.0, "method": "median Hough-circle radius on visible balls at 8.1s", "uncertainty_px": 2.0},
+  "pocket_centers": {
+    "top_left": {"x": 134, "y": 191, "radius_px": 35},
+    "top_right": {"x": 583, "y": 194, "radius_px": 33},
+    "middle_left": {"x": 128, "y": 634, "radius_px": 25},
+    "middle_right": {"x": 589, "y": 629, "radius_px": 25},
+    "bottom_left": {"x": 134, "y": 1070, "radius_px": 34},
+    "bottom_right": {"x": 585, "y": 1071, "radius_px": 35}
   },
-  "table_bounds": {
-    "left": 112,
-    "right": 496,
-    "top": 158,
-    "bottom": 905,
-    "status": "prior-derived; pending independent re-extraction"
-  },
-  "ball_radius_px": 11.13,
-  "pockets": {
-    "top_left": [
-      118.1,
-      163.2
-    ],
-    "top_right": [
-      489.9,
-      163.2
-    ],
-    "middle_left": [
-      108.2,
-      531.5
-    ],
-    "middle_right": [
-      499.8,
-      531.5
-    ],
-    "bottom_left": [
-      118.1,
-      899.8
-    ],
-    "bottom_right": [
-      489.9,
-      899.8
-    ]
-  },
-  "note": "Reference geometry for one screen layout; not universal across devices."
+  "status": "Re-extracted from original 720x1216 source frame. Approximate calibration for this device/UI scale; validate against other recordings before treating as universal."
 }
