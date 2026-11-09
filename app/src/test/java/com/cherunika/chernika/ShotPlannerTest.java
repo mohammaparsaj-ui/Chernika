@@ -22,6 +22,31 @@ public class ShotPlannerTest {
         assertNotNull(plan.pocket.id);
     }
 
+    private FrameState scaledFrame(double scale) {
+        int screenWidth = (int) Math.round(1200 * scale);
+        int screenHeight = (int) Math.round(1600 * scale);
+        FrameState frame = new FrameState(screenWidth, screenHeight);
+        frame.table = PlatoTableCalibration.fromDetectedFeltBounds(
+                100 * scale, 100 * scale, 611 * scale, 1100 * scale,
+                screenWidth, screenHeight);
+        frame.cueBall = new Ball(new Vec2(220 * scale, 600 * scale), 12 * scale, 0, true);
+        frame.balls.add(frame.cueBall);
+        frame.balls.add(new Ball(new Vec2(450 * scale, 600 * scale), 12 * scale, 1, false));
+        return frame;
+    }
+
+    @Test public void shotScoreAndPowerAreResolutionIndependent() {
+        ShotPlanner planner = new ShotPlanner();
+        ShotPlan reference = planner.plan(scaledFrame(1.0), 1);
+        ShotPlan doubled = planner.plan(scaledFrame(2.0), 1);
+
+        assertNotNull(reference);
+        assertNotNull(doubled);
+        assertEquals(reference.pocket.id, doubled.pocket.id);
+        assertEquals(reference.score, doubled.score, 1e-9);
+        assertEquals(reference.powerPercent, doubled.powerPercent, 1e-9);
+    }
+
     @Test public void returnsNoShotWhenTargetNumberIsUnknown() {
         FrameState frame = new FrameState(1200, 1600);
         frame.table = table();
