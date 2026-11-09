@@ -147,7 +147,6 @@ final class VisionAnalyzer {
         double minDim = Math.max(4.0, expectedDiameter * 0.45);
         double maxDim = Math.max(minDim + 2.0, expectedDiameter * 1.35);
         List<Double> observedRadii = new ArrayList<>();
-        scan:
         for (int y = top + 2; y < bottom - 2; y++) {
             for (int x = left + 2; x < right - 2; x++) {
                 int c = pixels[y * w + x];
@@ -161,6 +160,7 @@ final class VisionAnalyzer {
         int[] dx = {1, -1, 0, 0};
         int[] dy = {0, 0, 1, -1};
         ArrayDeque<Integer> queue = new ArrayDeque<>();
+        scan:
         for (int y = top + 2; y < bottom - 2; y++) {
             for (int x = left + 2; x < right - 2; x++) {
                 int index = y * w + x;
