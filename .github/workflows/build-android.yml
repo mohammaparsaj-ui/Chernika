@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'chernika-raw-source.zip'
       - 'build.trigger'
       - 'app/**'
       - 'build.gradle'
@@ -22,14 +23,19 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Expand source bundle and remove transfer chunks
+      - name: Expand uploaded raw source archive
         run: |
-          cat source_chunks/chunk*.txt | tr -d '\n' | base64 -d > /tmp/chernika-raw-source.zip
-          unzip -oq /tmp/chernika-raw-source.zip -d .
+          if [ -f chernika-raw-source.zip ]; then
+            unzip -oq chernika-raw-source.zip -d .
+            rm chernika-raw-source.zip
+          elif compgen -G 'source_chunks/chunk*.txt' > /dev/null; then
+            cat source_chunks/chunk*.txt | tr -d '\n' | base64 -d > /tmp/chernika-raw-source.zip
+            unzip -oq /tmp/chernika-raw-source.zip -d .
+          fi
           rm -rf source_chunks build.trigger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -62,4 +68,4 @@ jobs:
           name: Chernika-Raw-Engine-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
