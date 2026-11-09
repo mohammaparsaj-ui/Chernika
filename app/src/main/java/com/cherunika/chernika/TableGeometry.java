@@ -58,6 +58,7 @@ final class TableGeometry {
 
     /** Reference estimate; VisionAnalyzer may replace this with measured ball radii. */
     final double referenceBallRadius;
+    final double referenceBallRadiusUncertainty;
     /** Fit of the detected felt aspect ratio to the Plato reference (0..1). */
     final double aspectRatioFit;
     final String calibrationId;
@@ -65,11 +66,12 @@ final class TableGeometry {
     private final List<Pocket> pockets;
 
     TableGeometry(Bounds outerRailBounds, Bounds feltBounds, Bounds cushionNoseBounds,
-                  double referenceBallRadius, double aspectRatioFit,
-                  String calibrationId, List<Pocket> pockets) {
+                  double referenceBallRadius, double referenceBallRadiusUncertainty,
+                  double aspectRatioFit, String calibrationId, List<Pocket> pockets) {
         if (outerRailBounds == null || feltBounds == null || cushionNoseBounds == null
                 || pockets == null || pockets.size() != 6
                 || !isFinite(referenceBallRadius) || referenceBallRadius <= 0
+                || !isFinite(referenceBallRadiusUncertainty) || referenceBallRadiusUncertainty < 0
                 || !isFinite(aspectRatioFit) || aspectRatioFit < 0 || aspectRatioFit > 1
                 || calibrationId == null || calibrationId.trim().isEmpty()) {
             throw new IllegalArgumentException("Incomplete Plato table geometry");
@@ -84,6 +86,7 @@ final class TableGeometry {
         this.width = cushionNoseBounds.width;
         this.height = cushionNoseBounds.height;
         this.referenceBallRadius = referenceBallRadius;
+        this.referenceBallRadiusUncertainty = referenceBallRadiusUncertainty;
         this.aspectRatioFit = aspectRatioFit;
         this.calibrationId = calibrationId;
         this.pockets = Collections.unmodifiableList(new ArrayList<>(pockets));
