@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Raw autonomous 9-ball engine · on-device vision");
+        subtitle.setText("Instruction-first 9-ball engine · dry-run validation");
         subtitle.setTextColor(0xFFB9A8D9);
         subtitle.setTextSize(13);
         subtitle.setGravity(Gravity.CENTER);
@@ -74,7 +74,7 @@ public class MainActivity extends Activity {
                 prefs.edit().putString("last_status", "Enable Chernika Game Control in Accessibility settings, then return here.").apply();
                 startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             } else {
-                prefs.edit().putString("last_status", "Engine armed. Open Plato 9-ball in landscape.").apply();
+                prefs.edit().putString("last_status", "Dry-run monitor armed. Open Plato 9-ball in portrait.").apply();
             }
         });
         addButton(root, start);
@@ -87,7 +87,7 @@ public class MainActivity extends Activity {
         addButton(root, stop);
 
         TextView permissions = new TextView(this);
-        permissions.setText("The accessibility service reads the visible game screen and performs touch gestures only while the engine is enabled. It waits rather than shooting when the table, target, cue ball, or power bar is uncertain.");
+        permissions.setText("The accessibility service reads the visible game screen and reports candidate shots. This development build does not perform touch gestures. Live automation stays disabled until vision and power calibration are validated.");
         permissions.setTextColor(0xFFB9B2C7);
         permissions.setTextSize(13);
         permissions.setLineSpacing(5, 1.0f);
