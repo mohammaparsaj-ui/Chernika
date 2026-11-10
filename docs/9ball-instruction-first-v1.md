@@ -1,7 +1,7 @@
 # Chernika 9-Ball Engine v1 — Instruction-First Baseline
 
 **Branch:** `feature/9ball-instruction-first-v1`  
-**Status:** specification and pure-Java core are being built in isolation; this is not a claim of verified autonomous play.
+**Status:** pure-Java core and Android dry-run adapter are implemented and build-tested; this is not a claim of verified autonomous play.
 
 ## Source of requirements
 
@@ -82,6 +82,15 @@ The engine must return **WAIT** rather than shoot when any of these conditions a
 7. **Safety gate** — require confidence, clear paths, stable frame and live-game state.
 8. **Gesture adapter** — aim, use center/no spin and shoot only after authorization.
 9. **Outcome verifier** — wait for motion to stop, then confirm HUD progression, ball removal, foul/scratch or turn handoff.
+
+
+## Current implementation status
+
+The instruction-first core is now connected to the Android screenshot/OCR service in **dry-run mode**. The service reports WAIT states or candidate direct shots, but it does not dispatch touch gestures. The existing legacy shot planner remains in the source tree but is no longer called by this service.
+
+The first Android build completed successfully and the full JVM suite passed (47 tests, 0 failures). See `docs/engine-validation-status.md` for the exact build environment, APK identity, hash and outstanding limitations.
+
+**Do not enable live firing yet.** In particular, inventory recall for the green 6 ball, all-six-pocket refinement, motion-settled detection and power-bar calibration still require labelled-frame and supervised device validation.
 
 ## Acceptance tests
 
