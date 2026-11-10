@@ -8,6 +8,10 @@ final class Ball {
     int number;
     double numberConfidence;
 
+    Ball(Vec2 center, double radius, int number, boolean cue) {
+        this(center, radius, number, cue, 0.82);
+    }
+
     Ball(Vec2 center, double radius, int number, boolean cue, double detectionConfidence) {
         this.center = center;
         this.radius = radius;
