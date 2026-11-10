@@ -134,4 +134,51 @@ public class InstructionFirstEngineTest {
         assertEquals(EngineDecision.Status.WAIT, decision.status);
         assertTrue(decision.reason.contains("does not reposition"));
     }
+
+    @Test public void duplicateBallNumberFailsClosed() {
+        GameObservation state = observation(
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
+                true, true, false, false, 3,
+                cue(240, 250), ball(4, 500, 250), ball(4, 700, 350));
+
+        EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.WAIT, decision.status);
+        assertTrue(decision.reason.contains("Duplicate"));
+    }
+
+    @Test public void oneUnrefinedPocketBlocksPlanning() {
+        java.util.List<PocketObservation> uncertain = pockets();
+        uncertain.set(2, new PocketObservation(new Point2(1000, 0), 34, 34, 0.40));
+        GameObservation state = new GameObservation(bounds, 0.97, uncertain,
+                Arrays.asList(cue(240, 250), ball(4, 500, 250)),
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
+                true, true, false, false, 3, 0.95);
+
+        EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.WAIT, decision.status);
+        assertTrue(decision.reason.contains("pocket"));
+    }
+
+    @Test public void incompleteInventoryBlocksPlanning() {
+        GameObservation state = observation(
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
+                false, true, false, false, 3,
+                cue(240, 250), ball(4, 500, 250));
+
+        EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.WAIT, decision.status);
+        assertTrue(decision.reason.contains("incomplete"));
+    }
+
+    @Test public void readyPlanStillCannotDispatchGestures() {
+        GameObservation state = observation(
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
+                true, true, false, false, 3,
+                cue(240, 250), ball(4, 500, 250));
+
+        EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.PLAN_READY, decision.status);
+        assertTrue(decision.centerSpinOnly);
+        assertFalse(decision.gestureExecutionEnabled);
+    }
 }
