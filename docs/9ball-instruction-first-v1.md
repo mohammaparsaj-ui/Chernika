@@ -29,7 +29,7 @@ The first milestone is **reliable recognition and legal first contact**, not win
   - 6 green, which can blend into the table felt
 - Do not confuse the 1 ball with the 9 ball. Number/stripe recognition is more authoritative than color alone.
 - The cue-ball placement area is bounded by the white string/line at the foot of the table. A cue ball in hand may be dragged only within the permitted placement region.
-- At the opening break, leave the cue ball at its default position. Do not add an unnecessary cue-ball drag before the break.
+- At the opening break, leave the cue ball at its default position. Do not add an unnecessary cue-ball drag before the break. The narration says to aim at the 'second ball' in the diamond rack; treat this as the second rack position (not necessarily ball number 2) only as a hypothesis until verified against a live rack frame.
 - Spin presets exist (up, down, left, right, center), but v1 uses **center/no spin only**.
 - The visible aiming guide can help confirm a shot, but it does not replace legal-contact and obstruction checks.
 - The Best Shot replay shown in the recording includes a previous game's combo/kiss/bank shot. It is replay footage, not the current live table state.
