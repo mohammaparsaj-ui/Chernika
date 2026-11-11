@@ -19,6 +19,16 @@ public class TargetAnnouncementParserTest {
         assertEquals(1, result.legalBall);
     }
 
+    @Test public void recognizesTheYourTurnBadge() {
+        TargetAnnouncement result = new TargetAnnouncementParser().parse("Your Turn");
+        assertTrue(result.playerTurn);
+    }
+
+    @Test public void refusesToActOnOpponentTurn() {
+        TargetAnnouncement result = new TargetAnnouncementParser().parse("Opponent's Turn");
+        assertFalse(result.playerTurn);
+    }
+
     @Test public void parsesHyphenatedHudBallNames() {
         TargetAnnouncement result = new TargetAnnouncementParser()
                 .parse("Hit the 1-ball | Pocket the 9-ball");

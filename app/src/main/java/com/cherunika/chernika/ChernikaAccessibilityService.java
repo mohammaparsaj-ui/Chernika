@@ -137,6 +137,11 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     }
                     String visibleText = text == null ? "" : text.getText();
                     TargetAnnouncement announcement = parser.parse(visibleText);
+                    if (!announcement.playerTurn) {
+                        setStatus("Waiting for your turn in Plato. Engine is monitoring safely.");
+                        finishCapture(bitmap);
+                        return;
+                    }
                     FrameState frame = vision.analyze(bitmap);
                     setStatus(buildStatus(frame, announcement));
                     if (!frame.hasUsableTable() || frame.balls.isEmpty()) {

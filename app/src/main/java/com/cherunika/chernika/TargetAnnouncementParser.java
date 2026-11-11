@@ -22,7 +22,12 @@ final class TargetAnnouncementParser {
         boolean breakTurn = normalized.contains("turn to break")
                 || normalized.contains("break shot")
                 || normalized.contains("breaking now");
-        return new TargetAnnouncement(legal, objective, scratch, breakTurn, normalized);
+        boolean opponentTurn = normalized.contains("not your turn")
+                || (normalized.contains("opponent") && normalized.contains("turn"));
+        boolean playerTurn = breakTurn
+                || (normalized.contains("your turn") && !opponentTurn);
+        return new TargetAnnouncement(
+                legal, objective, scratch, breakTurn, playerTurn, normalized);
     }
 
     private int find(Pattern pattern, String text) {
