@@ -200,12 +200,54 @@ final class VisionAnalyzer {
                 int avg = Color.rgb((int) (sumR / count), (int) (sumG / count), (int) (sumB / count));
                 Color.colorToHSV(avg, avgHsv);
                 boolean cue = avgHsv[1] < 0.28f && avgHsv[2] > 0.60f;
-                Ball ball = new Ball(new Vec2(cx, cy), radius, 0, cue);
+                double aspectQuality = 1.0 - Math.min(1.0,
+                        Math.abs(Math.log(Math.max(0.01, aspect))) / Math.log(1.72));
+                double fillQuality = 1.0 - Math.min(1.0,
+                        Math.abs(fillRatio - 0.70) / 0.50);
+                double sizeQuality = 1.0 - Math.min(1.0,
+                        Math.abs(diameter - expectedDiameter) / Math.max(1.0, expectedDiameter * 0.55));
+                double detectionConfidence = 0.72
+                        + 0.10 * aspectQuality + 0.10 * fillQuality + 0.08 * sizeQuality;
+                detectionConfidence = Math.max(0.0, Math.min(1.0, detectionConfidence));
+                Ball ball = new Ball(new Vec2(cx, cy), radius, 0, cue, detectionConfidence);
                 frame.balls.add(ball);
                 observedRadii.add(radius);
                 if (cue && (frame.cueBall == null || avgHsv[2] > 0.65f)) frame.cueBall = ball;
                 if (frame.balls.size() >= 20) break scan;
             }
+        }
+
+        // The colour mask above is efficient for most balls, but it can
+        // completely miss the green 6 because its paint is close to the cloth.
+        // Add candidates from the independent radial-edge detector and merge
+        // them with colour candidates before inventory/OCR validation.
+        List<BallEdgeDetector.Candidate> edgeCandidates = BallEdgeDetector.detect(
+                pixels, w, h, left, top, right, bottom, sx, sy,
+                frame.table.referenceBallRadius, 12);
+        for (BallEdgeDetector.Candidate candidate : edgeCandidates) {
+            Vec2 center = new Vec2(candidate.x, candidate.y);
+            boolean duplicate = false;
+            for (Ball existing : frame.balls) {
+                double mergeDistance = Math.max(existing.radius, candidate.radius) * 1.20;
+                if (existing.center.distance(center) < mergeDistance) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate || frame.balls.size() >= 20
+                    || !frame.table.contains(center, candidate.radius * 0.35)) {
+                continue;
+            }
+
+            int averageColor = Color.rgb(
+                    candidate.meanRed, candidate.meanGreen, candidate.meanBlue);
+            float[] averageHsv = new float[3];
+            Color.colorToHSV(averageColor, averageHsv);
+            boolean cue = averageHsv[1] < 0.28f && averageHsv[2] > 0.60f;
+            Ball ball = new Ball(center, candidate.radius, 0, cue, candidate.score);
+            frame.balls.add(ball);
+            observedRadii.add(candidate.radius);
+            if (cue && frame.cueBall == null) frame.cueBall = ball;
         }
 
         BallRadiusEstimator.Estimate estimate = BallRadiusEstimator.estimate(
