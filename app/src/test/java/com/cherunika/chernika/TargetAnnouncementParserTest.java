@@ -29,6 +29,13 @@ public class TargetAnnouncementParserTest {
         assertFalse(result.playerTurn);
     }
 
+    @Test public void doesNotMistakeOpponentBreakForOurTurn() {
+        TargetAnnouncement result = new TargetAnnouncementParser()
+                .parse("Opponent's turn to break | Hit the 1-ball");
+        assertTrue(result.breakTurn == false);
+        assertFalse(result.playerTurn);
+    }
+
     @Test public void parsesHyphenatedHudBallNames() {
         TargetAnnouncement result = new TargetAnnouncementParser()
                 .parse("Hit the 1-ball | Pocket the 9-ball");

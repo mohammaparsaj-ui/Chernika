@@ -19,11 +19,11 @@ final class TargetAnnouncementParser {
         int objective = find(POCKET, normalized);
         boolean scratch = normalized.contains("scratch") || normalized.contains("ball in hand")
                 || normalized.contains("cue ball foul") || normalized.contains("cue ball in hand");
-        boolean breakTurn = normalized.contains("turn to break")
-                || normalized.contains("break shot")
-                || normalized.contains("breaking now");
         boolean opponentTurn = normalized.contains("not your turn")
                 || (normalized.contains("opponent") && normalized.contains("turn"));
+        boolean breakTurn = !opponentTurn && (normalized.contains("turn to break")
+                || normalized.contains("break shot")
+                || normalized.contains("breaking now"));
         boolean playerTurn = breakTurn
                 || (normalized.contains("your turn") && !opponentTurn);
         return new TargetAnnouncement(
