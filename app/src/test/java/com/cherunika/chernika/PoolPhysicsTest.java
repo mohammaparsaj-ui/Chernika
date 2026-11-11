@@ -73,17 +73,17 @@ public class PoolPhysicsTest {
     @Test public void ballEnteringCornerPocketIsCaptured() {
         TableGeometry table = table();
         Pocket pocket = table.pocket(Pocket.Id.TOP_LEFT);
-        // Approach through the left-rail opening at the corner. The path is
-        // calibrated to cross the rail inside its measured vertical mouth.
+        // Approach through the left-rail opening at the corner. This
+        // trajectory reaches the left gate before the top cushion gate.
         Vec2 targetPosition = new Vec2(
-                pocket.center.x + 31, pocket.center.y + 27);
+                pocket.center.x + 22, pocket.center.y + 30);
         FrameState frame = frameWithCue(new Vec2(
-                targetPosition.x + 31, targetPosition.y + 27));
+                targetPosition.x + 22, targetPosition.y + 30));
         Ball target = new Ball(targetPosition, frame.cueBall.radius, 1, false);
         frame.balls.add(target);
 
         PoolPhysics.Result result = new PoolPhysics().simulate(
-                frame, new Vec2(-31, -27), 40.0);
+                frame, new Vec2(-22, -30), 40.0);
 
         assertSame(target, result.firstContactBall);
         assertTrue(result.pocketed(target));
