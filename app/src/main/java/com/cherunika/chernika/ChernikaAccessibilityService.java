@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import com.cherunika.chernika.engine.BallColorClassifier;
 import com.cherunika.chernika.engine.BallObservation;
 import com.cherunika.chernika.engine.BallStateTracker;
 import com.cherunika.chernika.engine.EngineDecision;
