@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import com.cherunika.chernika.engine.BallColorClassifier;
 import com.cherunika.chernika.engine.BallObservation;
 import com.cherunika.chernika.engine.BallStateTracker;
 import com.cherunika.chernika.engine.EngineDecision;
@@ -198,7 +199,9 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     });
                 })
                 .addOnFailureListener(error -> {
-                    setStatus("HUD OCR failed: " + error.getClass().getSimpleName());
+                    setStatus("HUD OCR not ready: " + error.getClass().getSimpleName()
+                            + ". First use may be downloading the Google Play services OCR model; "
+                            + "keep internet on and leave Chernika active.");
                     finishCapture(bitmap);
                 });
     }
@@ -224,7 +227,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             }
             finished.run();
         }).addOnFailureListener(error -> {
-            setStatus("Ball-number OCR failed: " + error.getClass().getSimpleName());
+            setStatus("Ball-number OCR not ready: " + error.getClass().getSimpleName()
+                    + ". The first-run OCR model may still be downloading.");
             finished.run();
         });
     }
@@ -240,6 +244,18 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                 return Tasks.forResult(new NumberRead(0, 0.0));
             }
             Bitmap crop = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
+            int[] cropPixels = new int[crop.getWidth() * crop.getHeight()];
+            crop.getPixels(cropPixels, 0, crop.getWidth(), 0, 0,
+                    crop.getWidth(), crop.getHeight());
+            int cropCenterX = (int) Math.round(ball.center.x) - left;
+            int cropCenterY = (int) Math.round(ball.center.y) - top;
+            if (BallColorClassifier.isGreenSix(cropPixels,
+                    crop.getWidth(), crop.getHeight(), cropCenterX, cropCenterY,
+                    ball.radius)) {
+                crop.recycle();
+                return Tasks.forResult(new NumberRead(6, 0.82));
+            }
+
             Bitmap enlarged = Bitmap.createScaledBitmap(
                     crop, crop.getWidth() * 4, crop.getHeight() * 4, true);
             crop.recycle();
@@ -414,8 +430,13 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private boolean isReplayOrResultsScreen(String text) {
         String normalized = text == null ? "" : text.toLowerCase(Locale.ROOT);
         return normalized.contains("best shot") || normalized.contains("game over")
-                || normalized.contains("match over") || normalized.contains("play again")
-                || normalized.contains("watch replay") || normalized.contains("replay");
+                || normalized.contains("match over") || normalized.contains("match complete")
+                || normalized.contains("match finished") || normalized.contains("game finished")
+                || normalized.contains("play again") || normalized.contains("watch replay")
+                || normalized.contains("replay") || normalized.contains("you won")
+                || normalized.contains("you lost") || normalized.contains("you lose")
+                || normalized.contains("opponent won") || normalized.contains("victory")
+                || normalized.contains("defeat");
     }
 
     private void executePlan(FrameState frame, EngineDecision decision,

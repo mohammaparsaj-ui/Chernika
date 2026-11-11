@@ -1,6 +1,7 @@
 package com.cherunika.chernika;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +24,7 @@ final class BallEdgeDetector {
     private static final double MIN_MEAN_CONTRAST = 14.0;
     private static final double MIN_EDGE_SUPPORT = 0.50;
     private static final double MIN_SCORE = 0.78;
+    private static final double MIN_INTERIOR_BACKGROUND_CONTRAST = 4.0;
     private static final double[] COS = new double[ANGLE_COUNT];
     private static final double[] SIN = new double[ANGLE_COUNT];
 
@@ -106,6 +108,17 @@ final class BallEdgeDetector {
 
                 int[] meanColor = sampleMeanColor(
                         pixels, width, height, x, y, best.radius);
+                int[] surroundingColor = sampleMedianColorOnRing(
+                        pixels, width, height, x, y, best.radius * 2.0,
+                        best.radius * 2.8);
+                if (surroundingColor != null
+                        && rgbDistance(meanColor, surroundingColor)
+                        < MIN_INTERIOR_BACKGROUND_CONTRAST) {
+                    // Plato's hollow aiming reticle can look like a ball-sized
+                    // circle to the radial-edge detector. Its centre is just
+                    // the felt, unlike a real filled ball (including green 6).
+                    continue;
+                }
                 raw.add(new Candidate(
                         x * scaleX, y * scaleY, best.radius * averageScale,
                         best.score, meanColor[0], meanColor[1], meanColor[2]));
@@ -198,6 +211,48 @@ final class BallEdgeDetector {
         }
         if (count == 0) return new int[]{0, 0, 0};
         return new int[]{(int) (r / count), (int) (g / count), (int) (b / count)};
+    }
+
+    private static int[] sampleMedianColorOnRing(
+            int[] pixels, int width, int height,
+            int centerX, int centerY, double innerRadius, double outerRadius) {
+        int[] redValues = new int[ANGLE_COUNT];
+        int[] greenValues = new int[ANGLE_COUNT];
+        int[] blueValues = new int[ANGLE_COUNT];
+        int count = 0;
+        double middleRadius = (innerRadius + outerRadius) * 0.5;
+        for (int i = 0; i < ANGLE_COUNT; i++) {
+            int x = (int) Math.round(centerX + COS[i] * middleRadius);
+            int y = (int) Math.round(centerY + SIN[i] * middleRadius);
+            if (!inside(x, y, width, height)) continue;
+            int color = pixels[y * width + x];
+            redValues[count] = red(color);
+            greenValues[count] = green(color);
+            blueValues[count] = blue(color);
+            count++;
+        }
+        // Near a rail or pocket there may not be enough background samples;
+        // in that case keep the candidate rather than rejecting it blindly.
+        if (count < ANGLE_COUNT / 2) return null;
+        Arrays.sort(redValues, 0, count);
+        Arrays.sort(greenValues, 0, count);
+        Arrays.sort(blueValues, 0, count);
+        int middle = count / 2;
+        if ((count & 1) == 1) {
+            return new int[]{redValues[middle], greenValues[middle], blueValues[middle]};
+        }
+        return new int[]{
+                (redValues[middle - 1] + redValues[middle]) / 2,
+                (greenValues[middle - 1] + greenValues[middle]) / 2,
+                (blueValues[middle - 1] + blueValues[middle]) / 2
+        };
+    }
+
+    private static double rgbDistance(int[] first, int[] second) {
+        double dr = first[0] - second[0];
+        double dg = first[1] - second[1];
+        double db = first[2] - second[2];
+        return Math.sqrt(dr * dr + dg * dg + db * db);
     }
 
     private static boolean inside(int x, int y, int width, int height) {

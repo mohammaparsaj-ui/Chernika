@@ -45,6 +45,27 @@ public class BallEdgeDetectorTest {
         assertTrue(detect(pixels, width, height, 12.0).isEmpty());
     }
 
+    @Test public void ignoresHollowAimReticleOnUniformFelt() {
+        int width = 120;
+        int height = 120;
+        int felt = rgb(59, 141, 69);
+        int reticle = rgb(245, 245, 245);
+        int[] pixels = new int[width * height];
+        java.util.Arrays.fill(pixels, felt);
+
+        // A thin hollow circle with felt at its centre mimics Plato's aim reticle.
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                double distance = Math.hypot(x - 60, y - 60);
+                if (distance >= 10.5 && distance <= 11.8) {
+                    pixels[y * width + x] = reticle;
+                }
+            }
+        }
+
+        assertTrue(detect(pixels, width, height, 12.0).isEmpty());
+    }
+
     @Test public void keepsTwoSeparateBallsAsTwoCandidates() {
         int width = 140;
         int height = 120;
