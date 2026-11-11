@@ -45,7 +45,7 @@ Verified using JDK 17.0.21, Gradle 9.6.0, Android SDK Platform 35 and Android Bu
   - versionName `7.1-dev-dry-run`
   - minSdk `30`
   - targetSdk `35`
-- Debug APK SHA-256: pending final 7.1 package build.
+- Debug APK SHA-256: `bf19aa9e1dceaa0b107648b823e66e73932e7679fb841a2313a4ffca289e97c7`.
 
 No Android device or emulator was attached to the build environment, so this verification is a JVM/build check, not a live Plato gameplay test.
 
