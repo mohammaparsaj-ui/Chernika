@@ -5,6 +5,7 @@ import java.util.List;
 
 final class ShotPlanner {
     private final DiamondRackDetector rackDetector = new DiamondRackDetector();
+    private final PhysicsShotEvaluator physicsEvaluator = new PhysicsShotEvaluator();
 
     ShotPlan plan(FrameState frame, int legalBall) { return plan(frame, legalBall, 0); }
 
@@ -23,23 +24,70 @@ final class ShotPlanner {
                 if (!ball.cue && ball.number == 9) { nine = ball; break; }
             }
             ShotPlan combo = nine == null ? null : evaluateCombo(frame, target, nine);
-            if (combo != null) return combo;
+            if (combo != null) {
+                List<ShotPlan> comboOnly = new ArrayList<>();
+                comboOnly.add(combo);
+                return rankWithPhysics(frame, comboOnly, legalBall, objectiveBall);
+            }
         }
 
-        ShotPlan best = null;
+        List<ShotPlan> candidates = new ArrayList<>();
         for (Pocket pocket : frame.table.pockets()) {
             ShotPlan direct = evaluate(frame, target, pocket, pocket.aimPoint, null, false);
-            if (direct != null && (best == null || direct.score < best.score)) best = direct;
+            if (direct != null) candidates.add(direct);
 
             for (int rail = 0; rail < 4; rail++) {
                 Vec2 virtualPocket = reflect(pocket.aimPoint, frame.table, rail);
                 Vec2 bounce = railIntersection(target.center, virtualPocket, frame.table, rail);
                 if (bounce == null) continue;
                 ShotPlan bank = evaluate(frame, target, pocket, virtualPocket, bounce, true);
-                if (bank != null && (best == null || bank.score < best.score)) best = bank;
+                if (bank != null) candidates.add(bank);
             }
         }
-        return best;
+        return rankWithPhysics(frame, candidates, legalBall, objectiveBall);
+    }
+
+    /**
+     * Geometry proposes routes; the table simulator checks first contact,
+     * pocket outcome, scratches and candidate power before choosing among them.
+     * A geometric fallback remains while physical constants are calibrated.
+     */
+    private ShotPlan rankWithPhysics(FrameState frame, List<ShotPlan> candidates,
+                                     int legalBall, int objectiveBall) {
+        if (candidates == null || candidates.isEmpty()) return null;
+        candidates.sort((a, b) -> Double.compare(a.score, b.score));
+        ShotPlan best = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        int limit = Math.min(4, candidates.size());
+        double[] offsets = {-10.0, 0.0, 10.0};
+
+        for (int i = 0; i < limit; i++) {
+            ShotPlan geometric = candidates.get(i);
+            for (double offset : offsets) {
+                double power = Math.max(20.0, Math.min(98.0,
+                        geometric.powerPercent + offset));
+                ShotPlan trial = new ShotPlan(
+                        geometric.target, geometric.aimPoint, geometric.pocket,
+                        power, geometric.score, geometric.breakShot,
+                        geometric.bankShot, geometric.comboShot);
+                PhysicsShotEvaluator.Evaluation evaluation =
+                        physicsEvaluator.evaluate(frame, trial, legalBall, objectiveBall);
+                if (evaluation == null || !evaluation.legalFirstContact
+                        || evaluation.simulation.cueScratch
+                        || evaluation.simulation.anyBallOffTable) continue;
+
+                boolean objectiveMet = evaluation.targetPocketed
+                        && (objectiveBall != 9 || legalBall == 9 || evaluation.ninePocketed);
+                double score = geometric.score + Math.abs(offset) * 0.003
+                        - (objectiveMet ? 1.0 : 0.0)
+                        - evaluation.quality * 0.04;
+                if (score < bestScore) {
+                    bestScore = score;
+                    best = trial;
+                }
+            }
+        }
+        return best != null ? best : candidates.get(0);
     }
 
     private ShotPlan evaluateCombo(FrameState frame, Ball first, Ball nine) {
