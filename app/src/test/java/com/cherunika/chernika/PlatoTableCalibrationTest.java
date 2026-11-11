@@ -39,4 +39,19 @@ public class PlatoTableCalibrationTest {
         assertEquals(x, pocket.center.x, EPSILON);
         assertEquals(y, pocket.center.y, EPSILON);
     }
+    @Test public void projectsTheUploadedGameplayRecordingTo720By1216() {
+        TableGeometry table = PlatoTableCalibration.fromDetectedFeltBounds(
+                134, 194, 585, 1069, 720, 1216);
+        assertEquals(143.4, table.left, 0.25);
+        assertEquals(205.7, table.top, 0.25);
+        assertEquals(579.1, table.right, 0.25);
+        assertEquals(1058.4, table.bottom, 0.25);
+        assertPocket(table, Pocket.Id.TOP_LEFT, 141.8, 199.2);
+        assertPocket(table, Pocket.Id.TOP_RIGHT, 579.7, 199.2);
+        assertPocket(table, Pocket.Id.MIDDLE_LEFT, 129.7, 631.7);
+        assertPocket(table, Pocket.Id.MIDDLE_RIGHT, 591.7, 631.6);
+        assertPocket(table, Pocket.Id.BOTTOM_LEFT, 141.8, 1064.2);
+        assertPocket(table, Pocket.Id.BOTTOM_RIGHT, 579.7, 1064.1);
+    }
+
 }
