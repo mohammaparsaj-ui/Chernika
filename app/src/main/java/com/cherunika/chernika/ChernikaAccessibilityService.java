@@ -414,8 +414,13 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private boolean isReplayOrResultsScreen(String text) {
         String normalized = text == null ? "" : text.toLowerCase(Locale.ROOT);
         return normalized.contains("best shot") || normalized.contains("game over")
-                || normalized.contains("match over") || normalized.contains("play again")
-                || normalized.contains("watch replay") || normalized.contains("replay");
+                || normalized.contains("match over") || normalized.contains("match complete")
+                || normalized.contains("match finished") || normalized.contains("game finished")
+                || normalized.contains("play again") || normalized.contains("watch replay")
+                || normalized.contains("replay") || normalized.contains("you won")
+                || normalized.contains("you lost") || normalized.contains("you lose")
+                || normalized.contains("opponent won") || normalized.contains("victory")
+                || normalized.contains("defeat");
     }
 
     private void executePlan(FrameState frame, EngineDecision decision,
