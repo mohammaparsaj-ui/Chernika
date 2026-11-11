@@ -43,7 +43,7 @@ public class PoolPhysicsTest {
         frame.balls.add(target);
 
         PoolPhysics.Result result = new PoolPhysics().simulate(
-                frame, new Vec2(1, 0), 10.0);
+                frame, new Vec2(1, 0), 30.0);
 
         assertSame(target, result.firstContactBall);
         assertTrue(result.ballCollisions >= 1);
@@ -109,7 +109,7 @@ public class PoolPhysicsTest {
                 table.right - 120, table.top + 250));
 
         PoolPhysics.Result result = new PoolPhysics().simulate(
-                frame, new Vec2(1, 0), 30.0);
+                frame, new Vec2(1, 0), 50.0);
 
         assertTrue(result.cushionContacts >= 1);
         assertTrue(result.finalPosition(frame.cueBall).x < table.right - frame.cueBall.radius);
