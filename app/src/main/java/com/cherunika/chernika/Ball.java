@@ -44,6 +44,9 @@ final class Ball {
 
     void applyOcrNumber(int recognizedNumber) {
         if (cue || !validNumber(recognizedNumber)) return;
+        // A rack-template slot is a high-confidence geometric identity.
+        // OCR may be noisy on tiny glossy balls, so it must not overwrite it.
+        if (numberConfidence >= 0.95 && number != recognizedNumber) return;
         number = recognizedNumber;
         numberConfidence = 0.98;
     }

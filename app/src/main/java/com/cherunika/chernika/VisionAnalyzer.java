@@ -12,6 +12,8 @@ final class VisionAnalyzer {
     private final PowerBarReader powerReader = new PowerBarReader();
     private final PocketVisionRefiner pocketRefiner = new PocketVisionRefiner();
     private final BallColorClassifier colorClassifier = new BallColorClassifier();
+    private final DiamondRackVisionDetector rackVisionDetector =
+            new DiamondRackVisionDetector();
 
     FrameState analyze(Bitmap source) {
         FrameState frame = new FrameState(source.getWidth(), source.getHeight());
@@ -106,6 +108,70 @@ final class VisionAnalyzer {
         }
         recycleAnalysisBitmap(scaled, source);
         return frame;
+    }
+
+
+    /**
+     * The connected-component pass intentionally rejects oversized blobs.
+     * When those blobs are a touching 9-ball diamond, recover the nine centers
+     * from the calibrated rack template and verify every color slot first.
+     */
+    private void addMeasuredRackBalls(FrameState frame, int[] pixels, int width, int height,
+                                      double sx, double sy, List<Double> observedRadii) {
+        if (!looksLikeRackCluster(frame)) return;
+
+        DiamondRackVisionDetector.Result rack = rackVisionDetector.detect(
+                pixels, width, height, frame.table, sx, sy);
+        if (!rack.detected) return;
+
+        double centerX = rack.center.x;
+        double centerY = rack.center.y;
+        double radius = rack.ballRadius;
+        frame.balls.removeIf(ball -> !ball.cue
+                && Math.abs(ball.center.x - centerX) <= radius * 3.2
+                && Math.abs(ball.center.y - centerY) <= radius * 4.8);
+        frame.balls.addAll(rack.balls);
+
+        // Rebuild the radius sample after replacing any merged rack blob.
+        observedRadii.clear();
+        for (Ball ball : frame.balls) observedRadii.add(ball.radius);
+    }
+
+    private boolean looksLikeRackCluster(FrameState frame) {
+        if (frame == null || frame.table == null) return false;
+        int count = 0;
+        double minX = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        for (Ball ball : frame.balls) {
+            if (ball.cue) continue;
+            count++;
+            minX = Math.min(minX, ball.center.x);
+            maxX = Math.max(maxX, ball.center.x);
+            minY = Math.min(minY, ball.center.y);
+            maxY = Math.max(maxY, ball.center.y);
+        }
+        if (count == 0) return true;
+
+        double expectedX = frame.table.left + frame.table.width * 0.50;
+        double expectedY = frame.table.top + frame.table.height * 0.20;
+        if (count == 1) {
+            Ball only = null;
+            for (Ball ball : frame.balls) if (!ball.cue) { only = ball; break; }
+            return only != null
+                    && Math.abs(only.center.x - expectedX) <= frame.table.width * 0.12
+                    && Math.abs(only.center.y - expectedY) <= frame.table.height * 0.10;
+        }
+
+        double clusterWidth = maxX - minX;
+        double clusterHeight = maxY - minY;
+        double clusterCenterX = (minX + maxX) * 0.5;
+        double clusterCenterY = (minY + maxY) * 0.5;
+        return clusterWidth <= frame.table.width * 0.22
+                && clusterHeight <= frame.table.height * 0.18
+                && Math.abs(clusterCenterX - expectedX) <= frame.table.width * 0.10
+                && Math.abs(clusterCenterY - expectedY) <= frame.table.height * 0.10;
     }
 
     private void recycleAnalysisBitmap(Bitmap scaled, Bitmap source) {
@@ -228,6 +294,8 @@ final class VisionAnalyzer {
                 if (frame.balls.size() >= 20) break scan;
             }
         }
+
+        addMeasuredRackBalls(frame, pixels, w, h, sx, sy, observedRadii);
 
         BallRadiusEstimator.Estimate estimate = BallRadiusEstimator.estimate(
                 observedRadii, frame.table.referenceBallRadius,

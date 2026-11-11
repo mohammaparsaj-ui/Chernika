@@ -80,13 +80,29 @@ final class ShotPlanner {
         for (Ball ball : frame.balls) if (!ball.cue) objects.add(ball);
         if (objects.size() != 9) return null;
 
-        Ball apex = objects.get(0);
+        Ball apex = null;
         for (Ball ball : objects) {
-            if (ball.center.distance(frame.cueBall.center)
-                    < apex.center.distance(frame.cueBall.center)) {
+            if (ball.number == 1) {
                 apex = ball;
+                break;
             }
         }
+        if (apex == null) {
+            // Fallback to the lower apex in screen coordinates. The 1-ball
+            // is the front ball closest to the cue in this Plato orientation,
+            // but cue placement must never change which rack ball is targeted.
+            Vec2 downAxis = rack.longAxis;
+            if (downAxis.y < 0) downAxis = downAxis.scale(-1.0);
+            double greatestProjection = Double.NEGATIVE_INFINITY;
+            for (Ball ball : objects) {
+                double projection = ball.center.subtract(rack.center).dot(downAxis);
+                if (projection > greatestProjection) {
+                    greatestProjection = projection;
+                    apex = ball;
+                }
+            }
+        }
+        if (apex == null) return null;
         return new ShotPlan(apex, apex.center, null, 100.0,
                 0.0, true, false, false);
     }
