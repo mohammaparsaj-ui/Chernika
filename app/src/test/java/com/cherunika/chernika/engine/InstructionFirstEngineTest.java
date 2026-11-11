@@ -48,6 +48,18 @@ public class InstructionFirstEngineTest {
         assertTrue(decision.powerPercent >= 26.5 && decision.powerPercent <= 62.4);
     }
 
+    @Test public void openingBreakIsPausedUntilDedicatedBreakPlannerExists() {
+        GameObservation state = observation(
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 1,
+                        "It's your turn to break. Hit the 1 ball"),
+                true, true, false, false, 3,
+                cue(240, 250), ball(1, 500, 250));
+
+        EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.WAIT, decision.status);
+        assertTrue(decision.reason.contains("Opening break detected"));
+    }
+
     @Test public void opponentTurnNeverProducesPlan() {
         GameObservation state = new GameObservation(bounds, 0.97, pockets(),
                 Arrays.asList(cue(240, 250), ball(4, 500, 250)),
