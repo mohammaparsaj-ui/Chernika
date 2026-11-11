@@ -46,7 +46,8 @@ final class PowerBar {
     Vec2 pointForPower(double powerPercent) {
         double fraction = Math.max(0.0, Math.min(1.0, powerPercent / 100.0));
         if (orientation == Orientation.VERTICAL) {
-            return new Vec2((left + right) * 0.5,
+            double trackX = Float.isNaN(handleX) ? (left + right) * 0.5 : handleX;
+            return new Vec2(trackX,
                     bottom - 2.0 - fraction * Math.max(1.0, bottom - top - 4.0));
         }
         return new Vec2(left + 2.0 + fraction * Math.max(1.0, right - left - 4.0),
