@@ -198,7 +198,9 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     });
                 })
                 .addOnFailureListener(error -> {
-                    setStatus("HUD OCR failed: " + error.getClass().getSimpleName());
+                    setStatus("HUD OCR not ready: " + error.getClass().getSimpleName()
+                            + ". First use may be downloading the Google Play services OCR model; "
+                            + "keep internet on and leave Chernika active.");
                     finishCapture(bitmap);
                 });
     }
@@ -224,7 +226,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             }
             finished.run();
         }).addOnFailureListener(error -> {
-            setStatus("Ball-number OCR failed: " + error.getClass().getSimpleName());
+            setStatus("Ball-number OCR not ready: " + error.getClass().getSimpleName()
+                    + ". The first-run OCR model may still be downloading.");
             finished.run();
         });
     }
