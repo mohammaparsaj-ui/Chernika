@@ -9,12 +9,15 @@ final class DirectShotPlanner {
         final Point2 aimPoint;
         final int pocketIndex;
         final double score;
+        final double powerPercent;
 
-        Result(EngineDecision.ShotKind kind, Point2 aimPoint, int pocketIndex, double score) {
+        Result(EngineDecision.ShotKind kind, Point2 aimPoint, int pocketIndex,
+               double score, double powerPercent) {
             this.kind = kind;
             this.aimPoint = aimPoint;
             this.pocketIndex = pocketIndex;
             this.score = score;
+            this.powerPercent = powerPercent;
         }
     }
 
@@ -30,8 +33,9 @@ final class DirectShotPlanner {
         }
         Point2 contact = directContactPoint(observation, cue, target);
         if (contact == null) return null;
+        double power = estimatePower(observation, cue, target, contact, -1);
         return new Result(EngineDecision.ShotKind.LEGAL_CONTACT_ONLY, contact, -1,
-                cue.center.distance(contact));
+                cue.center.distance(contact), power);
     }
 
     private Result bestDirectPot(GameObservation observation, BallObservation cue,
@@ -57,11 +61,31 @@ final class DirectShotPlanner {
                     Math.min(1.0, cueDirection.dot(objectDirection)))) * cue.radius * 3.0;
             double score = cue.center.distance(ghost)
                     + target.center.distance(pocket.center) * 0.82 + alignmentPenalty;
+            double power = estimatePower(observation, cue, target, ghost, i);
             Result candidate = new Result(EngineDecision.ShotKind.DIRECT_POT,
-                    ghost, i, score);
+                    ghost, i, score, power);
             if (best == null || candidate.score < best.score) best = candidate;
         }
         return best;
+    }
+
+    private double estimatePower(GameObservation observation, BallObservation cue,
+                                 BallObservation target, Point2 aimPoint, int pocketIndex) {
+        // The recorded power sweep establishes top=0%, bottom=100%. Historical
+        // short/long shot references are sparse, so stay inside the legacy
+        // observed interval rather than extrapolating to maximum power.
+        double routePixels = cue.center.distance(aimPoint);
+        if (pocketIndex >= 0 && pocketIndex < observation.pockets.size()) {
+            routePixels += target.center.distance(
+                    observation.pockets.get(pocketIndex).center) * 0.72;
+        }
+        double tableWidth = Math.max(1.0, observation.playableBounds.width());
+        double normalizedRoute = routePixels / tableWidth;
+        return clamp(12.0 + 30.0 * normalizedRoute, 26.5, 62.4);
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private Point2 directContactPoint(GameObservation observation, BallObservation cue,

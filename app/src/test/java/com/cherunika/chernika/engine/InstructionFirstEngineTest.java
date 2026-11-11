@@ -13,7 +13,7 @@ public class InstructionFirstEngineTest {
                                         boolean live, boolean replay, boolean moving,
                                         int stableFrames, BallObservation... balls) {
         return new GameObservation(bounds, 0.97, pockets(), Arrays.asList(balls),
-                instruction, inventoryComplete, live, replay, moving, stableFrames, 0.95);
+                instruction, inventoryComplete, live, replay, moving, stableFrames, 0.95, true);
     }
 
     private java.util.List<PocketObservation> pockets() {
@@ -44,7 +44,26 @@ public class InstructionFirstEngineTest {
         assertEquals(EngineDecision.Status.PLAN_READY, decision.status);
         assertEquals(4, decision.legalBall);
         assertTrue(decision.aimPoint != null);
-        assertFalse(decision.gestureExecutionEnabled);
+        assertTrue(decision.gestureExecutionEnabled);
+        assertTrue(decision.powerPercent >= 26.5 && decision.powerPercent <= 62.4);
+    }
+
+    @Test public void opponentTurnNeverProducesPlan() {
+        GameObservation state = new GameObservation(bounds, 0.97, pockets(),
+                Arrays.asList(cue(240, 250), ball(4, 500, 250)),
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
+                true, true, false, false, 4, 0.95, false);
+        EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.WAIT, decision.status);
+        assertTrue(decision.reason.contains("own turn"));
+    }
+
+    @Test public void missingPowerControlBlocksExecution() {
+        GameObservation state = new GameObservation(bounds, 0.97, pockets(),
+                Arrays.asList(cue(240, 250), ball(4, 500, 250)),
+                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
+                true, true, false, false, 4, 0.20, true);
+        assertEquals(EngineDecision.Status.WAIT, engine.evaluate(state).status);
     }
 
     @Test public void hudMismatchFailsClosed() {
@@ -119,7 +138,7 @@ public class InstructionFirstEngineTest {
                 Collections.singletonList(new PocketObservation(new Point2(0, 0), 34, 34, 0.95)),
                 Arrays.asList(cue(240, 250), ball(4, 500, 250)),
                 new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
-                true, true, false, false, 3, 0.95);
+                true, true, false, false, 3, 0.95, true);
 
         assertEquals(EngineDecision.Status.WAIT, engine.evaluate(state).status);
     }
@@ -152,7 +171,7 @@ public class InstructionFirstEngineTest {
         GameObservation state = new GameObservation(bounds, 0.97, uncertain,
                 Arrays.asList(cue(240, 250), ball(4, 500, 250)),
                 new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
-                true, true, false, false, 3, 0.95);
+                true, true, false, false, 3, 0.95, true);
 
         EngineDecision decision = engine.evaluate(state);
         assertEquals(EngineDecision.Status.WAIT, decision.status);
@@ -168,17 +187,5 @@ public class InstructionFirstEngineTest {
         EngineDecision decision = engine.evaluate(state);
         assertEquals(EngineDecision.Status.WAIT, decision.status);
         assertTrue(decision.reason.contains("incomplete"));
-    }
-
-    @Test public void readyPlanStillCannotDispatchGestures() {
-        GameObservation state = observation(
-                new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
-                true, true, false, false, 3,
-                cue(240, 250), ball(4, 500, 250));
-
-        EngineDecision decision = engine.evaluate(state);
-        assertEquals(EngineDecision.Status.PLAN_READY, decision.status);
-        assertTrue(decision.centerSpinOnly);
-        assertFalse(decision.gestureExecutionEnabled);
     }
 }

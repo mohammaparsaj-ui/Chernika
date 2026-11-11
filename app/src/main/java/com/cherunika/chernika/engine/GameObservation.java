@@ -20,12 +20,25 @@ public final class GameObservation {
     public final boolean ballsMoving;
     public final int consecutiveStableFrames;
     public final double powerControlConfidence;
+    public final boolean yourTurn;
 
+    /** Backwards-compatible constructor for existing pure-Java tests. */
     public GameObservation(Rect2 playableBounds, double tableConfidence,
                             List<PocketObservation> pockets, List<BallObservation> balls,
                             HudInstruction instruction, boolean inventoryComplete,
                             boolean liveTable, boolean replayScreen, boolean ballsMoving,
                             int consecutiveStableFrames, double powerControlConfidence) {
+        this(playableBounds, tableConfidence, pockets, balls, instruction, inventoryComplete,
+                liveTable, replayScreen, ballsMoving, consecutiveStableFrames,
+                powerControlConfidence, true);
+    }
+
+    public GameObservation(Rect2 playableBounds, double tableConfidence,
+                            List<PocketObservation> pockets, List<BallObservation> balls,
+                            HudInstruction instruction, boolean inventoryComplete,
+                            boolean liveTable, boolean replayScreen, boolean ballsMoving,
+                            int consecutiveStableFrames, double powerControlConfidence,
+                            boolean yourTurn) {
         if (!Double.isFinite(tableConfidence) || tableConfidence < 0 || tableConfidence > 1
                 || !Double.isFinite(powerControlConfidence)
                 || powerControlConfidence < 0 || powerControlConfidence > 1
@@ -43,6 +56,7 @@ public final class GameObservation {
         this.ballsMoving = ballsMoving;
         this.consecutiveStableFrames = consecutiveStableFrames;
         this.powerControlConfidence = powerControlConfidence;
+        this.yourTurn = yourTurn;
     }
 
     private static <T> List<T> immutableCopy(List<T> source) {
