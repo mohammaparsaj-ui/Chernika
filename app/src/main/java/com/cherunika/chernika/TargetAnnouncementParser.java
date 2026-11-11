@@ -24,11 +24,11 @@ final class TargetAnnouncementParser {
         boolean breakTurn = !opponentTurn && (normalized.contains("turn to break")
                 || normalized.contains("break shot")
                 || normalized.contains("breaking now"));
-        // In Plato, the top-right "Hit the N-ball" HUD appears for the
-        // active player. Treat that target announcement as a turn signal too,
-        // while explicitly rejecting any opponent-turn wording.
-        boolean playerTurn = !opponentTurn && (breakTurn
-                || normalized.contains("your turn") || legal > 0);
+        // A target prompt may remain visible during the opponent's turn.
+        // Only the local Your Turn badge or an explicit local break message
+        // can authorize a shot.
+        boolean playerTurn = !opponentTurn
+                && (breakTurn || normalized.contains("your turn"));
         return new TargetAnnouncement(
                 legal, objective, scratch, breakTurn, playerTurn, normalized);
     }
