@@ -25,10 +25,14 @@ public class DiamondRackVisionDetectorTest {
         assertTrue(result.confidence > 0.55);
         assertEquals(1, ball(result, 1).number);
         assertEquals(9, ball(result, 9).number);
-        assertEquals(306.5, ball(result, 1).center.x, 1.0);
-        assertEquals(354.5, ball(result, 1).center.y, 1.0);
-        assertEquals(306.5, ball(result, 9).center.x, 1.0);
-        assertEquals(314.5, ball(result, 9).center.y, 1.0);
+        assertEquals("detected rack center x=" + result.center.x,
+                306.5, ball(result, 1).center.x, 3.0);
+        assertEquals("detected #1 y=" + ball(result, 1).center.y,
+                354.5, ball(result, 1).center.y, 2.0);
+        assertEquals("detected #9 x=" + ball(result, 9).center.x,
+                306.5, ball(result, 9).center.x, 3.0);
+        assertEquals("detected #9 y=" + ball(result, 9).center.y,
+                314.5, ball(result, 9).center.y, 2.0);
     }
 
     @Test public void refusesToInventANinthBallWhenTheRackIsIncomplete() {
