@@ -19,6 +19,12 @@ public class TargetAnnouncementParserTest {
         assertEquals(1, result.legalBall);
     }
 
+    @Test public void treatsPlatoHitBallHudAsTheActiveTurnSignal() {
+        TargetAnnouncement result = new TargetAnnouncementParser()
+                .parse("Hit the 1-ball | Pocket the 9-ball");
+        assertTrue(result.playerTurn);
+    }
+
     @Test public void recognizesTheYourTurnBadge() {
         TargetAnnouncement result = new TargetAnnouncementParser().parse("Your Turn");
         assertTrue(result.playerTurn);
