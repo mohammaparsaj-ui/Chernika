@@ -4,13 +4,9 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Bitmap;
-import android.graphics.ColorSpace;
 import android.graphics.Path;
-import android.hardware.HardwareBuffer;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -39,13 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Engine-only Plato adapter.
- *
- * Gesture execution is gated by: explicit activation, Plato foreground package,
- * OCR-confirmed own turn, live HUD instruction, stable table, complete ball
- * inventory, six confident pockets, and a detected vertical power slider.
- */
+/** MediaProjection supplies screen frames; Accessibility handles app detection and gestures. */
 public class ChernikaAccessibilityService extends AccessibilityService {
     private static final long CAPTURE_INTERVAL_MS = 1100;
     private static final long GESTURE_RETRY_COOLDOWN_MS = 4500;
@@ -64,6 +54,7 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private long lastCaptureRequestAt;
     private long lastGestureAttemptAt;
     private long lastShotAt;
+    private int lastProjectionFrameSequence;
     private boolean loopStarted;
     private String foregroundPackage = "";
     private int stableFrames;
@@ -160,43 +151,27 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         if (!isEngineEnabled() || !isPlatoForeground()) return;
         long now = System.currentTimeMillis();
         if (now - lastCaptureRequestAt < 1000) return;
-        if (Build.VERSION.SDK_INT < 30 || recognizer == null
-                || !captureBusy.compareAndSet(false, true)) return;
+        if (!captureBusy.compareAndSet(false, true)) return;
         lastCaptureRequestAt = now;
-        try {
-            takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
-                @Override public void onSuccess(ScreenshotResult result) {
-                    Bitmap bitmap = null;
-                    HardwareBuffer buffer = null;
-                    try {
-                        buffer = result.getHardwareBuffer();
-                        ColorSpace colorSpace = result.getColorSpace();
-                        Bitmap wrapped = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
-                        if (wrapped != null) {
-                            bitmap = wrapped.copy(Bitmap.Config.ARGB_8888, false);
-                            wrapped.recycle();
-                        }
-                    } catch (Throwable error) {
-                        setStatus("Screen capture failed: " + error.getClass().getSimpleName());
-                    } finally {
-                        if (buffer != null) buffer.close();
-                    }
-                    if (bitmap == null) {
-                        captureBusy.set(false);
-                        return;
-                    }
-                    processFrame(bitmap);
-                }
 
-                @Override public void onFailure(int errorCode) {
-                    captureBusy.set(false);
-                    setStatus("Screen capture unavailable (code " + errorCode + ").");
-                }
-            });
-        } catch (Throwable error) {
+        MediaProjectionCaptureService.FrameSnapshot snapshot =
+                MediaProjectionCaptureService.getLatestFrame();
+        if (snapshot == null) {
             captureBusy.set(false);
-            setStatus("Capture error: " + error.getClass().getSimpleName());
+            if (MediaProjectionCaptureService.isRunning()) {
+                setStatus("Screen capture is starting · waiting for the first frame.");
+            } else {
+                setStatus("Screen capture permission is missing. Tap STOP, then ACTIVATE and approve it.");
+            }
+            return;
         }
+        if (snapshot.sequence <= lastProjectionFrameSequence) {
+            if (!snapshot.bitmap.isRecycled()) snapshot.bitmap.recycle();
+            captureBusy.set(false);
+            return;
+        }
+        lastProjectionFrameSequence = snapshot.sequence;
+        processFrame(snapshot.bitmap);
     }
 
     private void processFrame(Bitmap bitmap) {
@@ -278,8 +253,6 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     if (!matcher.find()) return new NumberRead(0, 0.0);
                     int number = Integer.parseInt(matcher.group(1));
                     if (matcher.find()) return new NumberRead(0, 0.0);
-                    // Provisional OCR confidence remains deliberately below
-                    // the status of a measured/calibrated classifier.
                     return new NumberRead(number, 0.84);
                 } finally {
                     if (!enlarged.isRecycled()) enlarged.recycle();
@@ -558,4 +531,17 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         }
     }
 
+    private static final class Vec2 {
+        final double x;
+        final double y;
+
+        Vec2(double x, double y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        double distance(Vec2 other) {
+            return Math.hypot(x - other.x, y - other.y);
+        }
+    }
 }

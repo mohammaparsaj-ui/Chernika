@@ -1,47 +1,46 @@
 # Chernika direct-execution integration
 
-## Scope
+## Screen-capture permission flow
 
-This increment converts the instruction-first planner from dry-run reporting into a gated Android gesture adapter. It intentionally follows the spoken v1 gameplay requirements: direct routes only, center/no spin, legal first contact before potting ambition, and no automatic cue-ball relocation.
+The earlier build relied on AccessibilityService.takeScreenshot. This revision switches frame acquisition to Android MediaProjection so the operating system explicitly asks the user for screen-capture consent.
+
+Activation is now:
+1. Enable Chernika Game Control in Android Accessibility settings.
+2. Tap ACTIVATE.
+3. Approve Android's screen-capture dialog and choose Entire screen.
+4. The app starts a foreground service declared with foregroundServiceType="mediaProjection".
+5. Switch to Plato. The accessibility service detects the foreground package and reads frames supplied by the MediaProjection service.
+6. Tap STOP to disable game gestures and stop screen capture.
+
+A new Android consent token is requested for each capture session. The token is used once to create the virtual display. Android revocation stops the service and clears the engine-enabled flag.
 
 ## Runtime gates
 
 A shot can be dispatched only when all of the following are true:
 
-1. The user has activated Chernika.
-2. The active accessibility package contains 'plato'.
-3. OCR identifies the user's turn ('Your Turn' or 'Chernika's turn').
-4. The screen is not a replay/results screen and the HUD contains a recognized 9-ball instruction.
-5. The table is stable for at least three frames.
-6. All remaining object balls and the cue ball have a reconciled identity/inventory.
-7. All six pockets pass the confidence threshold.
-8. The vertical left-edge power slider is detected with at least 0.80 confidence.
-9. The same direct-shot plan is present in two consecutive observations.
-10. No previous shot is awaiting its result and the gesture cooldown has elapsed.
-
-The app package guard and own-turn OCR gate prevent background activity in other apps and opponent-turn shots. STOP is checked before aim and again before power input.
+1. The user has activated Chernika and granted the current MediaProjection session.
+2. The Accessibility service is enabled.
+3. The active accessibility package contains 'plato'.
+4. OCR identifies the user's turn ('Your Turn' or 'Chernika's turn').
+5. The screen is not a replay/results screen and the HUD contains a recognized 9-ball instruction.
+6. The table is stable for at least three frames.
+7. All remaining object balls and the cue ball have a reconciled identity/inventory.
+8. All six pockets pass the confidence threshold.
+9. The vertical left-edge power slider is detected.
+10. The same direct-shot plan is present in two consecutive observations.
+11. No previous shot is awaiting its result and the gesture cooldown has elapsed.
 
 ## Gesture mapping
 
 - Aiming uses one drag from the cue-ball center to the planner's ghost-ball aim point.
 - Power uses one drag on the vertical left-edge slider.
-- Recorded calibration indicates slider top=0%, bottom=100%; the drag begins at the top and moves downward.
+- Recorded calibration indicates slider top=0%, bottom=100%.
 - No fine-aim arrows or spin controls are touched.
-- Power is clamped to the legacy observed interval 26.5–62.4%. A simple route-distance heuristic interpolates within that range. This is a conservative first integration, not a calibrated physical power model.
+- Power is clamped to the legacy observed interval 26.5–62.4%. A route-distance heuristic interpolates within that range. This is a conservative first integration, not a calibrated physical power model.
 
-## Recorded evidence used
-
-- 1000323257.mp4: 720×1216 portrait gameplay; target progression and four outcome/power observations.
-- 1000323259.mp4: 720×1216 long match; turn handoffs, scratch events, target progression and ball movement.
-- 1000323339.mp4: reviewed direct-shot examples and power observations, plus bank/combo examples deliberately excluded from v1.
-- XRecorder_20261030_01.mp4: prior analysis of slider drag direction and short/long power references.
-- XRecorder_20261107_02.mp4: user-confirmed maximum-to-minimum power sweep; 97.8% UI maps to maximum effective power.
-
-The current local working set contains the three raw gameplay videos 1000323257.mp4, 1000323259.mp4 and 1000323339.mp4; the other recordings are represented by prior analysis and repository annotations. The 2.4-second XRecorder_20261110_02.mp4 home-screen clip is excluded.
-
-## Explicitly not enabled
+## Deliberate exclusions
 
 - Opening-break execution remains disabled until the intended second rack-position target is confirmed.
-- Ball-in-hand cue placement remains manual; the white-string boundary is not yet calibrated as a gesture region.
+- Ball-in-hand cue placement remains manual.
 - Banks, kicks, kisses, blind shots, combinations, multi-rail routes and spin remain excluded.
-- No live-device gameplay test has yet validated the integrated gestures. Treat the APK as supervised experimental software.
+- Live-device gameplay and gesture coordinates have not yet been verified.

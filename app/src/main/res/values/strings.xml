@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Chernika Engine</string>
-    <string name="accessibility_description">Observes the active Plato 9-ball table and performs direct aiming and power gestures only while the engine is activated.</string>
+    <string name="accessibility_description">Detects when Plato is in the foreground and performs game-control gestures only while the engine is activated. Screen images are captured only after separate Android screen-capture consent.</string>
 </resources>

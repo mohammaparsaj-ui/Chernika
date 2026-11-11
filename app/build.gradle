@@ -10,8 +10,8 @@ android {
         applicationId 'com.cherunika.chernika'
         minSdk 30
         targetSdk 35
-        versionCode 74
-        versionName '7.4-dev-direct-execution'
+        versionCode 75
+        versionName '7.5-mediaprojection-consent'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
