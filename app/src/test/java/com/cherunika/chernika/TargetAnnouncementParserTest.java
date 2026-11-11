@@ -19,10 +19,18 @@ public class TargetAnnouncementParserTest {
         assertEquals(1, result.legalBall);
     }
 
-    @Test public void treatsPlatoHitBallHudAsTheActiveTurnSignal() {
+    @Test public void targetHudAloneDoesNotAuthorizeAShot() {
         TargetAnnouncement result = new TargetAnnouncementParser()
                 .parse("Hit the 1-ball | Pocket the 9-ball");
+        assertTrue(result.hasTarget());
+        assertFalse(result.playerTurn);
+    }
+
+    @Test public void combinesYourTurnBadgeWithTargetHud() {
+        TargetAnnouncement result = new TargetAnnouncementParser()
+                .parse("Your Turn | Hit the 3-ball");
         assertTrue(result.playerTurn);
+        assertEquals(3, result.legalBall);
     }
 
     @Test public void recognizesTheYourTurnBadge() {
