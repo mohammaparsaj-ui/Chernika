@@ -35,6 +35,26 @@ public class DiamondRackVisionDetectorTest {
                 314.5, ball(result, 9).center.y, 2.0);
     }
 
+    @Test public void recognizesRackWhenTheSevenNonYellowBallsAreShuffled() {
+        int[] pixels = feltPixels();
+        int[] numbersBySlot = {3, 7, 2, 8, 9, 4, 6, 5, 1};
+        double[][] centers = rackCenters();
+        for (int i = 0; i < numbersBySlot.length; i++) {
+            int number = numbersBySlot[i];
+            drawBall(pixels, centers[i][0], centers[i][1], RADIUS,
+                    colorFor(number), number == 9);
+        }
+
+        DiamondRackVisionDetector.Result result = detector.detect(
+                pixels, WIDTH, HEIGHT, table(), 1.0, 1.0);
+        assertTrue(result.detected);
+        assertEquals(9, result.balls.size());
+        assertEquals(1, ball(result, 1).number);
+        assertEquals(9, ball(result, 9).number);
+        assertEquals(306.5, ball(result, 1).center.x, 3.0);
+        assertEquals(354.5, ball(result, 1).center.y, 2.0);
+    }
+
     @Test public void cachedRackCenterIsRevalidatedAgainstTheCurrentFrame() {
         int[] pixels = rackPixels(false);
         DiamondRackVisionDetector.Result first = detector.detect(
@@ -100,7 +120,18 @@ public class DiamondRackVisionDetectorTest {
                 0xFF4E4274, 0xFFFFC400, 0xFFBE6948,
                 0xFF414B7B, 0xFFE51B23, 0xFFFFC400
         };
-        double[][] centers = {
+        double[][] centers = rackCenters();
+
+        for (int i = 0; i < numbers.length; i++) {
+            if (omitOneBall && numbers[i] == 1) continue;
+            drawBall(pixels, centers[i][0], centers[i][1],
+                    RADIUS, colors[i], numbers[i] == 9);
+        }
+        return pixels;
+    }
+
+    private double[][] rackCenters() {
+        return new double[][] {
                 {CENTER_X, CENTER_Y - 2 * Math.sqrt(3) * RADIUS},
                 {CENTER_X - RADIUS, CENTER_Y - Math.sqrt(3) * RADIUS},
                 {CENTER_X + RADIUS, CENTER_Y - Math.sqrt(3) * RADIUS},
@@ -111,13 +142,20 @@ public class DiamondRackVisionDetectorTest {
                 {CENTER_X + RADIUS, CENTER_Y + Math.sqrt(3) * RADIUS},
                 {CENTER_X, CENTER_Y + 2 * Math.sqrt(3) * RADIUS}
         };
+    }
 
-        for (int i = 0; i < numbers.length; i++) {
-            if (omitOneBall && numbers[i] == 1) continue;
-            drawBall(pixels, centers[i][0], centers[i][1],
-                    RADIUS, colors[i], numbers[i] == 9);
+    private int colorFor(int number) {
+        switch (number) {
+            case 1:
+            case 9: return 0xFFFFC400;
+            case 2: return 0xFF414B7B;
+            case 3: return 0xFFE51B23;
+            case 4: return 0xFF4E4274;
+            case 5: return 0xFFBE6948;
+            case 6: return 0xFF435327;
+            case 7: return 0xFF624C39;
+            default: return 0xFF101010;
         }
-        return pixels;
     }
 
     private int[] feltPixels() {

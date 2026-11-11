@@ -11,6 +11,14 @@ public class TargetAnnouncementParserTest {
         assertFalse(result.scratch);
     }
 
+    @Test public void breakInstructionTakesPriorityEvenWhenHudAlsoSaysHitOneBall() {
+        TargetAnnouncement result = new TargetAnnouncementParser()
+                .parse("It's your turn to break | Hit the 1-ball");
+        assertTrue(result.breakTurn);
+        assertTrue(result.hasTarget());
+        assertEquals(1, result.legalBall);
+    }
+
     @Test public void recognizesBallInHand() {
         TargetAnnouncement result = new TargetAnnouncementParser().parse("Scratch - Ball in hand");
         assertTrue(result.scratch);

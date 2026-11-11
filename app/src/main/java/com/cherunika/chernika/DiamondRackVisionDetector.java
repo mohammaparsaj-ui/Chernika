@@ -37,11 +37,11 @@ final class DiamondRackVisionDetector {
         }
     }
 
-    private static final int[] SLOT_NUMBERS = {8, 6, 7, 4, 9, 5, 2, 3, 1};
-    private static final String[] SLOT_FAMILIES = {
-            "black", "green", "maroon", "purple", "yellow",
-            "orange", "blue", "red", "yellow"
-    };
+    // Only the two yellow balls have fixed rack slots in 9-ball:
+    // #9 is centered and #1 is the lower/front apex. The other seven balls
+    // may be shuffled between games, so identify them by their shell colors.
+    private static final int NINE_BALL_SLOT = 4;
+    private static final int ONE_BALL_SLOT = 8;
     private static final double SQRT_THREE = Math.sqrt(3.0);
     private static final double SAMPLE_RADIUS_FACTOR = 0.88;
     private static final double MIN_MEAN_CONFIDENCE = 0.50;
@@ -138,11 +138,11 @@ final class DiamondRackVisionDetector {
 
         List<Ball> balls = new ArrayList<>(9);
         double sourceRadius = candidate.radius * analysisScale;
-        for (int i = 0; i < SLOT_NUMBERS.length; i++) {
+        for (int i = 0; i < candidate.slotNumbers.length; i++) {
             double ballX = candidate.centerX + slotX(i) * candidate.radius;
             double ballY = candidate.centerY + slotY(i) * candidate.radius;
             double confidence = candidate.slotConfidences[i];
-            int number = SLOT_NUMBERS[i];
+            int number = candidate.slotNumbers[i];
             balls.add(new Ball(
                     new Vec2(ballX * sourceScaleX, ballY * sourceScaleY),
                     sourceRadius, number, false, number, confidence));
@@ -165,41 +165,54 @@ final class DiamondRackVisionDetector {
     private Candidate evaluate(int[] pixels, int width, int height,
                                double centerX, double centerY, double radius) {
         double[] confidences = new double[9];
+        int[] slotNumbers = new int[9];
+        boolean[] seenNumbers = new boolean[10];
         double confidenceSum = 0.0;
 
-        for (int i = 0; i < SLOT_NUMBERS.length; i++) {
+        for (int i = 0; i < slotNumbers.length; i++) {
             double ballX = centerX + slotX(i) * radius;
             double ballY = centerY + slotY(i) * radius;
             BallColorClassifier.Result color = colorClassifier.classify(
                     pixels, width, height, ballX, ballY,
                     radius * SAMPLE_RADIUS_FACTOR);
 
-            String expectedFamily = SLOT_FAMILIES[i];
-            if (!expectedFamily.equals(color.family)) return null;
-
+            int number;
             double confidence = color.confidence;
-            if ("yellow".equals(expectedFamily)) {
-                // Plato's solid 1 and striped 9 share the yellow family.
-                // Their known rack slots are authoritative when glare makes
-                // the stripe classifier uncertain or reverses its guess.
-                if (confidence < 0.50) confidence = 0.52;
-                if (SLOT_NUMBERS[i] == 9 && color.stripeScore >= 0.12) {
-                    confidence += 0.10;
-                } else if (SLOT_NUMBERS[i] == 1 && color.stripeScore <= 0.48) {
-                    confidence += 0.05;
+            if ("yellow".equals(color.family)) {
+                // The 9-ball is the center yellow ball and the 1-ball is the
+                // lower/front apex in the supplied Plato table orientation.
+                // This positional rule also handles glare on their glossy shells.
+                if (i == NINE_BALL_SLOT) {
+                    number = 9;
+                    if (confidence < 0.50) confidence = 0.52;
+                    if (color.stripeScore >= 0.12) confidence += 0.10;
+                } else if (i == ONE_BALL_SLOT) {
+                    number = 1;
+                    if (confidence < 0.50) confidence = 0.52;
+                    if (color.stripeScore <= 0.48) confidence += 0.05;
+                } else {
+                    return null;
                 }
-            } else if (color.number != SLOT_NUMBERS[i]) {
-                return null;
+            } else {
+                number = color.number;
+                if (number < 2 || number > 8) return null;
             }
 
+            if (seenNumbers[number]) return null;
+            seenNumbers[number] = true;
+            slotNumbers[i] = number;
             confidence = clamp(confidence, 0.0, 1.0);
             confidences[i] = confidence;
             confidenceSum += confidence;
         }
 
-        double mean = confidenceSum / SLOT_NUMBERS.length;
+        for (int number = 1; number <= 9; number++) {
+            if (!seenNumbers[number]) return null;
+        }
+
+        double mean = confidenceSum / slotNumbers.length;
         if (mean < MIN_MEAN_CONFIDENCE) return null;
-        return new Candidate(centerX, centerY, radius, mean, confidences);
+        return new Candidate(centerX, centerY, radius, mean, slotNumbers, confidences);
     }
 
     private Candidate better(Candidate current, Candidate candidate,
@@ -255,14 +268,16 @@ final class DiamondRackVisionDetector {
         final double centerY;
         final double radius;
         final double confidence;
+        final int[] slotNumbers;
         final double[] slotConfidences;
 
         Candidate(double centerX, double centerY, double radius,
-                  double confidence, double[] slotConfidences) {
+                  double confidence, int[] slotNumbers, double[] slotConfidences) {
             this.centerX = centerX;
             this.centerY = centerY;
             this.radius = radius;
             this.confidence = confidence;
+            this.slotNumbers = slotNumbers;
             this.slotConfidences = slotConfidences;
         }
     }

@@ -15,7 +15,10 @@ final class TargetAnnouncementParser {
         int objective = find(POCKET, normalized);
         boolean scratch = normalized.contains("scratch") || normalized.contains("ball in hand")
                 || normalized.contains("cue ball foul") || normalized.contains("cue ball in hand");
-        return new TargetAnnouncement(legal, objective, scratch, normalized);
+        boolean breakTurn = normalized.contains("turn to break")
+                || normalized.contains("break shot")
+                || normalized.contains("breaking now");
+        return new TargetAnnouncement(legal, objective, scratch, breakTurn, normalized);
     }
 
     private int find(Pattern pattern, String text) {

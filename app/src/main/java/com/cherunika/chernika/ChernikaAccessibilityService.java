@@ -183,18 +183,18 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             }
 
             ShotPlan plan = null;
-            if (announcement.hasTarget()) {
+            DiamondRackDetector.Result rack = rackDetector.detect(frame.balls, frame.table);
+            // A break instruction and a verified diamond rack take priority
+            // over the simultaneous "Hit the 1-ball" HUD hint.
+            if (announcement.breakTurn || rack.detected) {
+                if (rack.detected) plan = planner.planBreak(frame);
+            } else if (announcement.hasTarget()) {
                 plan = planner.plan(frame, announcement.legalBall, announcement.objectiveBall);
             } else {
-                DiamondRackDetector.Result rack = rackDetector.detect(frame.balls, frame.table);
-                if (rack.detected) {
-                    plan = planner.planBreak(frame);
-                } else {
-                    LowestBallSelector.Selection selection =
-                            lowestBallSelector.select(frame.balls, 0);
-                    if (selection.isConfident()) {
-                        plan = planner.plan(frame, selection.number, 0);
-                    }
+                LowestBallSelector.Selection selection =
+                        lowestBallSelector.select(frame.balls, 0);
+                if (selection.isConfident()) {
+                    plan = planner.plan(frame, selection.number, 0);
                 }
             }
 
@@ -359,12 +359,16 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         int objectBalls = 0;
         for (Ball ball : frame.balls) if (!ball.cue) objectBalls++;
 
-        if (!announcement.hasTarget()) {
-            DiamondRackDetector.Result rack = rackDetector.detect(frame.balls, frame.table);
+        DiamondRackDetector.Result rack = rackDetector.detect(frame.balls, frame.table);
+        if (announcement.breakTurn || rack.detected) {
             if (rack.detected) {
-                return "Table and six pockets detected · 9-ball diamond rack verified · "
+                return "Break turn detected · 9-ball diamond rack verified · "
                         + String.format(Locale.US, "%.0f%% rack fit", rack.confidence * 100.0);
             }
+            return "Break turn detected · waiting for all nine rack balls to be verified.";
+        }
+
+        if (!announcement.hasTarget()) {
             LowestBallSelector.Selection selection = lowestBallSelector.select(frame.balls, 0);
             if (selection.isConfident()) {
                 return "Table detected · lowest ball #" + selection.number
