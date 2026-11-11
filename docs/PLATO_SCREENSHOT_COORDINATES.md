@@ -44,11 +44,11 @@ Measured from the first two screenshots. Ball radius is approximately
 | 2 | 6 | Green | (294.5, 294.5) |
 | 2 | 7 | Maroon | (318.5, 294.5) |
 | 3 | 4 | Purple | (283.5, 314.5) |
-| 3 | 1 | Yellow solid | (306.5, 314.5) |
+| 3 | 9 | Yellow stripe | (306.5, 314.5) |
 | 3 | 5 | Orange | (329.5, 314.5) |
 | 4 | 2 | Blue | (294.5, 334.5) |
 | 4 | 3 | Red | (318.5, 334.5) |
-| 5 | 9 | Yellow stripe | (306.5, 354.5) |
+| 5 | 1 | Yellow solid | (306.5, 354.5) |
 
 The rack's long axis is vertical. The 1-ball is the bottom apex nearest the
 cue ball; the 9-ball is the center ball in row 3. This matches the HUD's
