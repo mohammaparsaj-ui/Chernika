@@ -24,6 +24,11 @@ public final class InstructionFirstEngine {
         String invalid = validate(observation);
         if (invalid != null) return EngineDecision.waitFor(invalid);
 
+        if (observation.instruction.type == HudInstruction.Type.HIT_BALL
+                && isOpeningBreak(observation.instruction.rawText)) {
+            return EngineDecision.waitFor(
+                    "Opening break detected. The dedicated rack-position and high-power break planner is not enabled yet.");
+        }
         if (observation.instruction.type == HudInstruction.Type.BALL_IN_HAND) {
             return EngineDecision.waitFor(
                     "Ball-in-hand detected. v1 does not reposition the cue ball automatically.");
@@ -101,6 +106,12 @@ public final class InstructionFirstEngine {
                 : "Direct legal first-contact candidate found; no direct pot is available.";
         return EngineDecision.plan(legalBall, objectiveBall, result.kind,
                 result.aimPoint, result.pocketIndex, result.powerPercent, reason);
+    }
+
+    private boolean isOpeningBreak(String rawText) {
+        String normalized = rawText == null ? "" : rawText.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", " ").replaceAll("\\s+", " ").trim();
+        return normalized.contains("turn to break");
     }
 
     private String validate(GameObservation observation) {
