@@ -81,33 +81,30 @@ public class BallEdgeDetectorTest {
         assertTrue("Fixture must contain its 8-byte dimensions header", raw.length >= 8);
         int width = readInt(raw, 0);
         int height = readInt(raw, 4);
-        assertEquals("Fixture dimensions must match the labelled crop", 250, width);
-        assertEquals("Fixture dimensions must match the labelled crop", 300, height);
-        assertEquals("Fixture must contain exactly three RGB bytes per pixel",
-                8 + width * height * 3, raw.length);
+        assertEquals("Fixture dimensions must match the downsampled crop", 120, width);
+        assertEquals("Fixture dimensions must match the downsampled crop", 144, height);
+        assertEquals("Fixture must contain exactly one grayscale byte per pixel",
+                8 + width * height, raw.length);
         int[] pixels = new int[width * height];
         for (int i = 0; i < pixels.length; i++) {
-            int offset = 8 + i * 3;
-            int red = raw[offset] & 0xff;
-            int green = raw[offset + 1] & 0xff;
-            int blue = raw[offset + 2] & 0xff;
-            pixels[i] = 0xff000000 | red << 16 | green << 8 | blue;
+            int gray = raw[8 + i] & 0xff;
+            pixels[i] = 0xff000000 | gray << 16 | gray << 8 | gray;
         }
         List<BallEdgeDetector.Candidate> candidates = BallEdgeDetector.detect(
                 pixels, width, height, 0, 0, width, height,
-                1.0, 1.0, 12.8, 12);
+                1.0, 1.0, 12.8 * 120.0 / 250.0, 12);
 
         assertTrue("A nine-ball rack should yield at least nine circular candidates: "
                 + candidates.size(), candidates.size() >= 9);
         assertTrue("The candidate count should remain bounded by the rack inventory: "
                 + candidates.size(), candidates.size() <= 10);
 
-        // In this cropped 250x300 recording frame, the green 6 is the
-        // second-row left ball, centered approximately at (117, 82).
-        BallEdgeDetector.Candidate greenSix = nearest(candidates, 117, 82);
+        // In this downsampled 120x144 recording frame, the green 6 is the
+        // second-row left ball, centered approximately at (56, 39).
+        BallEdgeDetector.Candidate greenSix = nearest(candidates, 56, 39);
         assertNotNull("The green 6 must not disappear into the green cloth", greenSix);
-        assertTrue("Green 6 center error should be within 4.5 px",
-                Math.hypot(greenSix.x - 117, greenSix.y - 82) <= 4.5);
+        assertTrue("Green 6 center error should be within 3.5 px",
+                Math.hypot(greenSix.x - 56, greenSix.y - 39) <= 3.5);
         assertTrue(greenSix.score >= 0.78);
     }
 
