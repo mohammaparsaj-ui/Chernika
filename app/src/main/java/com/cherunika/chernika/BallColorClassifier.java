@@ -104,7 +104,7 @@ final class BallColorClassifier {
         double medianSaturation = median(saturations, sampleCount);
         double medianValue = median(values, sampleCount);
 
-        // The 8-ball is nearly black. A dark maroon 7-ball has a much higher
+        // The 8-ball is nearly black. A dark maroon 7-ball has a higher
         // median value and is classified later in the warm-color branch.
         if (medianValue < 0.28) {
             double darkConfidence = clamp((0.36 - medianValue) / 0.16, 0.0, 1.0);
@@ -122,10 +122,12 @@ final class BallColorClassifier {
         }
         double purity = hueHistogram[dominantBin] / (double) hueCount;
 
-        double redSupport = support(hues, hueCount, 0.0, 18.0)
-                + support(hues, hueCount, 342.0, 360.0);
+        // The reference screenshots put the red 3-ball near hue 0° and
+        // orange 5 / maroon 7 around 17°–28°. Keep the split narrow.
+        double redSupport = support(hues, hueCount, 0.0, 15.0)
+                + support(hues, hueCount, 345.0, 360.0);
         double yellowSupport = support(hues, hueCount, 36.0, 68.0);
-        double orangeSupport = support(hues, hueCount, 15.0, 38.0);
+        double orangeSupport = support(hues, hueCount, 15.0, 40.0);
         double blueSupport = support(hues, hueCount, 190.0, 250.0);
         double purpleSupport = support(hues, hueCount, 250.0, 305.0);
         double greenSupport = support(hues, hueCount, 75.0, 165.0);
