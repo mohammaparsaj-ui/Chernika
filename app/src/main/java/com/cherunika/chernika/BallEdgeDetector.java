@@ -120,7 +120,7 @@ final class BallEdgeDetector {
         for (Candidate candidate : raw) {
             boolean overlaps = false;
             for (Candidate existing : accepted) {
-                double exclusion = Math.max(candidate.radius, existing.radius) * 1.55;
+                double exclusion = Math.max(candidate.radius, existing.radius) * 1.65;
                 if (Math.hypot(candidate.x - existing.x, candidate.y - existing.y) < exclusion) {
                     overlaps = true;
                     break;
