@@ -101,8 +101,12 @@ final class BallColorClassifier {
         double medianValue = median(values, sampleCount);
 
         // The 8-ball can be almost achromatic, so test it before requiring
-        // enough saturated hue samples for the other color families.
-        if (medianValue < 0.28) {
+        // enough saturated hue samples for the other color families. A red
+        // hue vote prevents a dim 7-ball from being mistaken for the 8-ball.
+        double earlyRedSupport = hueCount == 0 ? 0.0
+                : support(hues, hueCount, 0.0, 18.0)
+                    + support(hues, hueCount, 342.0, 360.0);
+        if (medianValue < 0.28 && earlyRedSupport < 0.38) {
             double darkConfidence = clamp((0.36 - medianValue) / 0.16, 0.0, 1.0);
             double confidence = 0.68 * darkConfidence
                     + 0.32 * clamp((0.72 - medianSaturation) / 0.45, 0.0, 1.0);
