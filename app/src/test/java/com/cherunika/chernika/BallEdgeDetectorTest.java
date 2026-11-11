@@ -64,7 +64,7 @@ public class BallEdgeDetectorTest {
     }
 
     @Test public void recoversGreenSixFromActualPlatoDiamondRackFrame() throws Exception {
-        InputStream fixture = getClass().getResourceAsStream("/green_6_rack_crop.jpg.b64");
+        InputStream fixture = getClass().getResourceAsStream("/green_6_rack_crop.grayz.b64");
         assertNotNull("Actual Plato rack fixture must be packaged", fixture);
         String encoded;
         try (InputStream input = fixture) {
@@ -108,7 +108,7 @@ public class BallEdgeDetectorTest {
         assertTrue(greenSix.score >= 0.78);
     }
 
-        private static int readInt(byte[] data, int offset) {
+    private static int readInt(byte[] data, int offset) {
         return (data[offset] & 0xff) << 24
                 | (data[offset + 1] & 0xff) << 16
                 | (data[offset + 2] & 0xff) << 8
