@@ -101,6 +101,19 @@ public class BallStateTrackerTest {
         assertFalse(result.inventoryComplete);
     }
 
+    @Test public void pocketedBallIdentityIsNotInheritedFromAStalePosition() {
+        BallStateTracker state = new BallStateTracker();
+        state.update(Arrays.asList(cue(120, 250), ball(4, 200, 200)), pockets());
+        state.update(Arrays.asList(cue(120, 250), ball(4, 200, 200)), pockets());
+
+        // Ball 4 disappears; the immediately previous scene no longer contains it.
+        state.update(Arrays.asList(cue(120, 250)), pockets());
+        BallStateTracker.Result later = state.update(
+                Arrays.asList(cue(120, 250), unread(200, 200)), pockets());
+
+        assertEquals(0, later.balls.get(1).number);
+    }
+
     @Test public void stableCounterResetsWhenAnyBallMoves() {
         BallStateTracker state = new BallStateTracker();
         List<BallObservation> scene = partialScene();
