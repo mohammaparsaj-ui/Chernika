@@ -35,6 +35,23 @@ public class DiamondRackVisionDetectorTest {
                 314.5, ball(result, 9).center.y, 2.0);
     }
 
+    @Test public void cachedRackCenterIsRevalidatedAgainstTheCurrentFrame() {
+        int[] pixels = rackPixels(false);
+        DiamondRackVisionDetector.Result first = detector.detect(
+                pixels, WIDTH, HEIGHT, table(), 1.0, 1.0);
+        assertTrue(first.detected);
+
+        DiamondRackVisionDetector.Result second = detector.detect(
+                pixels, WIDTH, HEIGHT, table(), 1.0, 1.0, first.center);
+        assertTrue(second.detected);
+        assertEquals(first.center.x, second.center.x, 0.01);
+        assertEquals(first.center.y, second.center.y, 0.01);
+
+        DiamondRackVisionDetector.Result missing = detector.detect(
+                rackPixels(true), WIDTH, HEIGHT, table(), 1.0, 1.0, first.center);
+        assertFalse(missing.detected);
+    }
+
     @Test public void refusesToInventANinthBallWhenTheRackIsIncomplete() {
         DiamondRackVisionDetector.Result result = detector.detect(
                 rackPixels(true), WIDTH, HEIGHT, table(), 1.0, 1.0);

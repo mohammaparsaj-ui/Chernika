@@ -62,6 +62,12 @@ final class DiamondRackVisionDetector {
 
     Result detect(int[] pixels, int width, int height,
                   TableGeometry table, double sourceScaleX, double sourceScaleY) {
+        return detect(pixels, width, height, table, sourceScaleX, sourceScaleY, null);
+    }
+
+    Result detect(int[] pixels, int width, int height,
+                  TableGeometry table, double sourceScaleX, double sourceScaleY,
+                  Vec2 preferredCenter) {
         if (pixels == null || width <= 0 || height <= 0
                 || pixels.length < width * height || table == null
                 || sourceScaleX <= 0 || sourceScaleY <= 0) {
@@ -81,6 +87,21 @@ final class DiamondRackVisionDetector {
         double rangeX = table.width * 0.05 / sourceScaleX;
         double rangeY = table.height * 0.05 / sourceScaleY;
         double coarseStep = Math.max(2.0, Math.round(radius * 0.35));
+
+        // Recheck the last rack location first. While a break setup remains
+        // static this is only nine small color samples, not a full window scan.
+        if (preferredCenter != null) {
+            double cachedX = preferredCenter.x / sourceScaleX;
+            double cachedY = preferredCenter.y / sourceScaleY;
+            if (Math.abs(cachedX - expectedX) <= rangeX
+                    && Math.abs(cachedY - expectedY) <= rangeY) {
+                Candidate cached = evaluate(
+                        pixels, width, height, cachedX, cachedY, radius);
+                Result cachedResult = toResult(
+                        cached, analysisScale, sourceScaleX, sourceScaleY, table);
+                if (cachedResult.detected) return cachedResult;
+            }
+        }
 
         Candidate best = null;
         for (double centerX = expectedX - rangeX;
@@ -105,16 +126,22 @@ final class DiamondRackVisionDetector {
                 refined = better(refined, candidate, expectedX, expectedY);
             }
         }
-        if (refined == null || refined.confidence < MIN_MEAN_CONFIDENCE) {
+        return toResult(refined, analysisScale, sourceScaleX, sourceScaleY, table);
+    }
+
+    private Result toResult(Candidate candidate, double analysisScale,
+                            double sourceScaleX, double sourceScaleY,
+                            TableGeometry table) {
+        if (candidate == null || candidate.confidence < MIN_MEAN_CONFIDENCE) {
             return Result.none();
         }
 
         List<Ball> balls = new ArrayList<>(9);
-        double sourceRadius = radius * analysisScale;
+        double sourceRadius = candidate.radius * analysisScale;
         for (int i = 0; i < SLOT_NUMBERS.length; i++) {
-            double ballX = refined.centerX + slotX(i) * radius;
-            double ballY = refined.centerY + slotY(i) * radius;
-            double confidence = refined.slotConfidences[i];
+            double ballX = candidate.centerX + slotX(i) * candidate.radius;
+            double ballY = candidate.centerY + slotY(i) * candidate.radius;
+            double confidence = candidate.slotConfidences[i];
             int number = SLOT_NUMBERS[i];
             balls.add(new Ball(
                     new Vec2(ballX * sourceScaleX, ballY * sourceScaleY),
@@ -129,10 +156,10 @@ final class DiamondRackVisionDetector {
         }
 
         Vec2 center = new Vec2(
-                refined.centerX * sourceScaleX,
-                refined.centerY * sourceScaleY);
+                candidate.centerX * sourceScaleX,
+                candidate.centerY * sourceScaleY);
         return new Result(true, center, sourceRadius,
-                refined.confidence, REQUIRED_MATCHES, balls);
+                candidate.confidence, REQUIRED_MATCHES, balls);
     }
 
     private Candidate evaluate(int[] pixels, int width, int height,

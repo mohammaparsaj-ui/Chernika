@@ -14,6 +14,7 @@ final class VisionAnalyzer {
     private final BallColorClassifier colorClassifier = new BallColorClassifier();
     private final DiamondRackVisionDetector rackVisionDetector =
             new DiamondRackVisionDetector();
+    private Vec2 cachedRackCenter;
 
     FrameState analyze(Bitmap source) {
         FrameState frame = new FrameState(source.getWidth(), source.getHeight());
@@ -118,11 +119,18 @@ final class VisionAnalyzer {
      */
     private void addMeasuredRackBalls(FrameState frame, int[] pixels, int width, int height,
                                       double sx, double sy, List<Double> observedRadii) {
-        if (!looksLikeRackCluster(frame)) return;
+        if (!looksLikeRackCluster(frame)) {
+            cachedRackCenter = null;
+            return;
+        }
 
         DiamondRackVisionDetector.Result rack = rackVisionDetector.detect(
-                pixels, width, height, frame.table, sx, sy);
-        if (!rack.detected) return;
+                pixels, width, height, frame.table, sx, sy, cachedRackCenter);
+        if (!rack.detected) {
+            cachedRackCenter = null;
+            return;
+        }
+        cachedRackCenter = rack.center;
 
         double centerX = rack.center.x;
         double centerY = rack.center.y;

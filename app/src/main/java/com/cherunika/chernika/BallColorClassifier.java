@@ -62,6 +62,9 @@ final class BallColorClassifier {
         };
         final double inner = radius * 0.47;
         final double outer = radius * 0.94;
+        // Reuse one HSV scratch array for every pixel; rack-template search
+        // invokes this classifier repeatedly on small circular samples.
+        double[] hsv = new double[3];
 
         for (int y = top; y <= bottom; y++) {
             for (int x = left; x <= right; x++) {
@@ -70,7 +73,7 @@ final class BallColorClassifier {
                 double distance = Math.hypot(dx, dy);
                 if (distance < inner || distance > outer) continue;
 
-                double[] hsv = rgbToHsv(pixels[y * width + x]);
+                rgbToHsv(pixels[y * width + x], hsv);
                 double hue = hsv[0];
                 double saturation = hsv[1];
                 double value = hsv[2];
@@ -239,7 +242,7 @@ final class BallColorClassifier {
                 : copy[middle];
     }
 
-    private double[] rgbToHsv(int argb) {
+    private void rgbToHsv(int argb, double[] hsv) {
         double r = ((argb >> 16) & 0xFF) / 255.0;
         double g = ((argb >> 8) & 0xFF) / 255.0;
         double b = (argb & 0xFF) / 255.0;
@@ -258,7 +261,9 @@ final class BallColorClassifier {
         }
         if (hue < 0.0) hue += 360.0;
         double saturation = max <= 1e-8 ? 0.0 : delta / max;
-        return new double[]{hue, saturation, max};
+        hsv[0] = hue;
+        hsv[1] = saturation;
+        hsv[2] = max;
     }
 
     private static double clamp(double value, double min, double max) {
