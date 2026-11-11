@@ -151,11 +151,13 @@ final class BallColorClassifier {
             if (stripeScore >= 0.22 && stripeBandRatio >= 0.43) {
                 number = 9;
                 stripeConfidence = clamp(stripeScore / 0.38, 0.0, 1.0);
-            } else if (stripeScore <= 0.20) {
+            } else if (stripeScore <= 0.23) {
                 number = 1;
-                stripeConfidence = clamp(1.0 - stripeScore / 0.28, 0.0, 1.0);
+                stripeConfidence = clamp(1.0 - stripeScore / 0.32, 0.0, 1.0);
             } else {
-                return Result.unknown();
+                // Keep the yellow family so the verified rack template can
+                // resolve its known 1/9 slot without guessing from glare.
+                return new Result(0, 0.0, "yellow", stripeScore);
             }
             double confidence = 0.55 * yellowSupport + 0.25 * purity
                     + 0.20 * stripeConfidence;

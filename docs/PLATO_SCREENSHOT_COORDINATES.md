@@ -50,10 +50,10 @@ Measured from the first two screenshots. Ball radius is approximately
 | 4 | 3 | Red | (318.5, 334.5) |
 | 5 | 9 | Yellow stripe | (306.5, 354.5) |
 
-The rack's long axis is vertical. In these screenshots the 1-ball is the
-center ball in row 3 and the 9-ball is the bottom apex. Do not assume that
-the lowest screen-y ball is always the legal target; use the HUD instruction
-and the 1-ball position shown by the rack/color/number detector.
+The rack's long axis is vertical. The 1-ball is the bottom apex nearest the
+cue ball; the 9-ball is the center ball in row 3. This matches the HUD's
+"Hit the 1-ball" instruction. Do not infer the legal ball from screen-y order
+alone; use the HUD instruction and the standard 9-ball rack positions.
 
 ## Cue-ball examples
 
@@ -71,7 +71,7 @@ specific frame, not fixed rack positions.
 | Ball | Color | Center (x, y) |
 |---:|---|---:|
 | Cue | White | (155.5, 272.5) |
-| 1 | Yellow solid | (292.5, 305.5) |
+| 9 | Yellow stripe | (292.5, 305.5) |
 | 2 | Blue | (286.5, 479.5) |
 | 3 | Red | (466.5, 455.5) |
 | 4 | Purple | (219.5, 261.5) |
@@ -79,7 +79,7 @@ specific frame, not fixed rack positions.
 | 6 | Not visible in this frame | — |
 | 7 | Maroon | (322.5, 277.5) |
 | 8 | Black | (169.5, 643.0) |
-| 9 | Yellow stripe | (417.5, 823.5) |
+| 1 | Yellow solid | (417.5, 823.5) |
 
 ## Color identity model
 
