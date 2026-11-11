@@ -243,6 +243,18 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                 return Tasks.forResult(new NumberRead(0, 0.0));
             }
             Bitmap crop = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
+            int[] cropPixels = new int[crop.getWidth() * crop.getHeight()];
+            crop.getPixels(cropPixels, 0, crop.getWidth(), 0, 0,
+                    crop.getWidth(), crop.getHeight());
+            int cropCenterX = (int) Math.round(ball.center.x) - left;
+            int cropCenterY = (int) Math.round(ball.center.y) - top;
+            if (BallColorClassifier.isGreenSix(cropPixels,
+                    crop.getWidth(), crop.getHeight(), cropCenterX, cropCenterY,
+                    ball.radius)) {
+                crop.recycle();
+                return Tasks.forResult(new NumberRead(6, 0.82));
+            }
+
             Bitmap enlarged = Bitmap.createScaledBitmap(
                     crop, crop.getWidth() * 4, crop.getHeight() * 4, true);
             crop.recycle();
