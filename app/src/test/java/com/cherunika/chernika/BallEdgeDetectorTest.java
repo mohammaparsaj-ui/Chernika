@@ -2,14 +2,14 @@ package com.cherunika.chernika;
 
 import org.junit.Test;
 
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.zip.InflaterInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
-import javax.imageio.ImageIO;
 
 import static org.junit.Assert.*;
 
@@ -70,13 +70,29 @@ public class BallEdgeDetectorTest {
         try (InputStream input = fixture) {
             encoded = new String(input.readAllBytes(), StandardCharsets.US_ASCII).trim();
         }
-        byte[] jpeg = Base64.getDecoder().decode(encoded);
-        BufferedImage image = ImageIO.read(new ByteArrayInputStream(jpeg));
-        assertNotNull("Rack fixture must decode as an image", image);
-
-        int width = image.getWidth();
-        int height = image.getHeight();
-        int[] pixels = image.getRGB(0, 0, width, height, null, 0, width);
+        byte[] compressed = Base64.getDecoder().decode(encoded);
+        byte[] raw;
+        try (InflaterInputStream inflater = new InflaterInputStream(
+                new ByteArrayInputStream(compressed));
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            inflater.transferTo(output);
+            raw = output.toByteArray();
+        }
+        assertTrue("Fixture must contain its 8-byte dimensions header", raw.length >= 8);
+        int width = readInt(raw, 0);
+        int height = readInt(raw, 4);
+        assertEquals("Fixture dimensions must match the labelled crop", 250, width);
+        assertEquals("Fixture dimensions must match the labelled crop", 300, height);
+        assertEquals("Fixture must contain exactly three RGB bytes per pixel",
+                8 + width * height * 3, raw.length);
+        int[] pixels = new int[width * height];
+        for (int i = 0; i < pixels.length; i++) {
+            int offset = 8 + i * 3;
+            int red = raw[offset] & 0xff;
+            int green = raw[offset + 1] & 0xff;
+            int blue = raw[offset + 2] & 0xff;
+            pixels[i] = 0xff000000 | red << 16 | green << 8 | blue;
+        }
         List<BallEdgeDetector.Candidate> candidates = BallEdgeDetector.detect(
                 pixels, width, height, 0, 0, width, height,
                 1.0, 1.0, 12.8, 12);
@@ -93,6 +109,13 @@ public class BallEdgeDetectorTest {
         assertTrue("Green 6 center error should be within 4.5 px",
                 Math.hypot(greenSix.x - 117, greenSix.y - 82) <= 4.5);
         assertTrue(greenSix.score >= 0.78);
+    }
+
+        private static int readInt(byte[] data, int offset) {
+        return (data[offset] & 0xff) << 24
+                | (data[offset + 1] & 0xff) << 16
+                | (data[offset + 2] & 0xff) << 8
+                | (data[offset + 3] & 0xff);
     }
 
     private static List<BallEdgeDetector.Candidate> detect(
