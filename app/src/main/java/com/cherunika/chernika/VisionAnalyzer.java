@@ -10,6 +10,7 @@ import java.util.List;
 final class VisionAnalyzer {
     private static final int MAX_ANALYSIS_WIDTH = 900;
     private final PowerBarReader powerReader = new PowerBarReader();
+    private final OpenCvBallDetector openCvBallDetector = new OpenCvBallDetector();
     private final PocketVisionRefiner pocketRefiner = new PocketVisionRefiner();
     private final BallColorClassifier colorClassifier = new BallColorClassifier();
     private final DiamondRackVisionDetector rackVisionDetector =
@@ -104,8 +105,24 @@ final class VisionAnalyzer {
             int fr = (int) (red / feltSamples);
             int fg = (int) (green / feltSamples);
             int fb = (int) (blue / feltSamples);
-            detectBalls(frame, pixels, w, h, left, top, right, bottom,
-                    sx, sy, fr, fg, fb);
+            boolean circleVision = openCvBallDetector.detect(
+                    scaled, frame, sx, sy, pixels, w, h);
+            if (circleVision) {
+                List<Double> observedRadii = new ArrayList<>();
+                for (Ball ball : frame.balls) observedRadii.add(ball.radius);
+                addMeasuredRackBalls(frame, pixels, w, h, sx, sy, observedRadii);
+                BallRadiusEstimator.Estimate estimate = BallRadiusEstimator.estimate(
+                        observedRadii, frame.table.referenceBallRadius,
+                        frame.table.referenceBallRadiusUncertainty);
+                if (estimate != null) {
+                    frame.table = frame.table.withVisionRefinements(
+                            frame.table.pockets(), estimate.radius, estimate.uncertainty);
+                    frame.ballRadiusRefined = true;
+                }
+            } else {
+                detectBalls(frame, pixels, w, h, left, top, right, bottom,
+                        sx, sy, fr, fg, fb);
+            }
         }
         recycleAnalysisBitmap(scaled, source);
         return frame;
