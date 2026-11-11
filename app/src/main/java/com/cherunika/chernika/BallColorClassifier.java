@@ -4,9 +4,11 @@ import java.util.Arrays;
 
 /**
  * Classifies the outer shell of a Plato 9-ball crop.
- * Number OCR remains the strongest source when readable. Color is a fallback
- * for recovering the legal lowest ball when the HUD announcement is absent.
- * Ambiguous yellow (1/9) and red (3/7) crops are rejected rather than guessed.
+ * OCR remains the strongest source when readable. Color is a fallback.
+ *
+ * The supplied Plato screenshots show that the 5-ball (bright orange) and
+ * 7-ball (dark maroon) overlap in hue. Their value/brightness separates them:
+ * the 7 is dark; the 5 is bright. Do not classify the 7 as an orange 5.
  */
 final class BallColorClassifier {
     static final class Result {
@@ -17,7 +19,7 @@ final class BallColorClassifier {
 
         Result(int number, double confidence, String family, double stripeScore) {
             this.number = number;
-            this.confidence = confidence;
+            this.confidence = clamp(confidence, 0.0, 1.0);
             this.family = family;
             this.stripeScore = stripeScore;
         }
@@ -55,7 +57,9 @@ final class BallColorClassifier {
         int[] bandTotal = new int[4];
         int[] sideWhite = new int[4];
         int[] sideTotal = new int[4];
-        final double[] angles = {0.0, Math.PI / 4.0, Math.PI / 2.0, 3.0 * Math.PI / 4.0};
+        final double[] angles = {
+                0.0, Math.PI / 4.0, Math.PI / 2.0, 3.0 * Math.PI / 4.0
+        };
         final double inner = radius * 0.47;
         final double outer = radius * 0.94;
 
@@ -100,13 +104,9 @@ final class BallColorClassifier {
         double medianSaturation = median(saturations, sampleCount);
         double medianValue = median(values, sampleCount);
 
-        // The 8-ball can be almost achromatic, so test it before requiring
-        // enough saturated hue samples for the other color families. A red
-        // hue vote prevents a dim 7-ball from being mistaken for the 8-ball.
-        double earlyRedSupport = hueCount == 0 ? 0.0
-                : support(hues, hueCount, 0.0, 18.0)
-                    + support(hues, hueCount, 342.0, 360.0);
-        if (medianValue < 0.28 && earlyRedSupport < 0.38) {
+        // The 8-ball is nearly black. A dark maroon 7-ball has a much higher
+        // median value and is classified later in the warm-color branch.
+        if (medianValue < 0.28) {
             double darkConfidence = clamp((0.36 - medianValue) / 0.16, 0.0, 1.0);
             double confidence = 0.68 * darkConfidence
                     + 0.32 * clamp((0.72 - medianSaturation) / 0.45, 0.0, 1.0);
@@ -162,22 +162,40 @@ final class BallColorClassifier {
                     : Result.unknown();
         }
 
-        if (redSupport >= 0.28) {
-            int number;
-            double valueConfidence;
-            if (medianValue <= 0.45) {
-                number = 7;
-                valueConfidence = clamp((0.52 - medianValue) / 0.25, 0.0, 1.0);
-            } else if (medianValue >= 0.55) {
-                number = 3;
-                valueConfidence = clamp((medianValue - 0.48) / 0.28, 0.0, 1.0);
-            } else {
-                return Result.unknown();
-            }
-            double confidence = 0.50 * redSupport + 0.20 * purity
-                    + 0.15 * medianSaturation + 0.15 * valueConfidence;
+        // Plato's 7-ball is a dark maroon/brown-red. It shares some hue range
+        // with the bright orange 5-ball, so classify dark warm shells first.
+        if (orangeSupport >= 0.28 && medianValue < 0.52) {
+            double darkWarmConfidence = clamp((0.58 - medianValue) / 0.30, 0.0, 1.0);
+            double confidence = 0.55 * orangeSupport + 0.20 * purity
+                    + 0.10 * medianSaturation + 0.15 * darkWarmConfidence;
             return confidence >= 0.42
-                    ? new Result(number, confidence, "red", stripeScore)
+                    ? new Result(7, confidence, "maroon", stripeScore)
+                    : Result.unknown();
+        }
+
+        if (redSupport >= 0.28) {
+            if (medianValue < 0.45) {
+                double darkWarmConfidence = clamp((0.58 - medianValue) / 0.30, 0.0, 1.0);
+                double confidence = 0.55 * redSupport + 0.20 * purity
+                        + 0.10 * medianSaturation + 0.15 * darkWarmConfidence;
+                return confidence >= 0.42
+                        ? new Result(7, confidence, "maroon", stripeScore)
+                        : Result.unknown();
+            }
+            double brightConfidence = clamp((medianValue - 0.42) / 0.42, 0.0, 1.0);
+            double confidence = 0.55 * redSupport + 0.20 * purity
+                    + 0.10 * medianSaturation + 0.15 * brightConfidence;
+            return confidence >= 0.42
+                    ? new Result(3, confidence, "red", stripeScore)
+                    : Result.unknown();
+        }
+
+        if (orangeSupport >= 0.34 && medianValue >= 0.52) {
+            double brightConfidence = clamp((medianValue - 0.42) / 0.42, 0.0, 1.0);
+            double confidence = 0.60 * orangeSupport + 0.20 * purity
+                    + 0.10 * medianSaturation + 0.10 * brightConfidence;
+            return confidence >= 0.42
+                    ? new Result(5, confidence, "orange", stripeScore)
                     : Result.unknown();
         }
 
@@ -188,8 +206,6 @@ final class BallColorClassifier {
             number = 2; family = "blue"; familySupport = blueSupport;
         } else if (purpleSupport >= 0.34) {
             number = 4; family = "purple"; familySupport = purpleSupport;
-        } else if (orangeSupport >= 0.34) {
-            number = 5; family = "orange"; familySupport = orangeSupport;
         } else if (greenSupport >= 0.34) {
             number = 6; family = "green"; familySupport = greenSupport;
         }
@@ -241,7 +257,7 @@ final class BallColorClassifier {
         return new double[]{hue, saturation, max};
     }
 
-    private double clamp(double value, double min, double max) {
+    private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
 }

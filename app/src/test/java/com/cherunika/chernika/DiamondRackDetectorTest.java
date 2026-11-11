@@ -12,20 +12,35 @@ public class DiamondRackDetectorTest {
     private final DiamondRackDetector detector = new DiamondRackDetector();
 
     @Test public void detectsAStandardFiveRowDiamondRack() {
-        TableGeometry table = table();
         List<Ball> balls = diamond(305, 360, 11.13);
-        DiamondRackDetector.Result result = detector.detect(balls, table);
+        DiamondRackDetector.Result result = detector.detect(balls, table());
         assertTrue(result.detected);
         assertTrue(result.confidence > 0.8);
     }
 
+    @Test public void detectsTheMeasuredPlatoRackCoordinates() {
+        List<Ball> balls = new ArrayList<>();
+        double[][] centers = {
+                {306.5, 274.5},
+                {294.5, 294.5}, {318.5, 294.5},
+                {283.5, 314.5}, {306.5, 314.5}, {329.5, 314.5},
+                {294.5, 334.5}, {318.5, 334.5},
+                {306.5, 354.5}
+        };
+        for (double[] center : centers) {
+            balls.add(new Ball(new Vec2(center[0], center[1]), 11.5, 0, false));
+        }
+        DiamondRackDetector.Result result = detector.detect(balls, table());
+        assertTrue(result.detected);
+        assertTrue(result.confidence > 0.90);
+    }
+
     @Test public void rejectsRackWhenOneBallIsFarFromItsSlot() {
-        TableGeometry table = table();
         List<Ball> balls = diamond(305, 360, 11.13);
         Ball old = balls.get(4);
         balls.set(4, new Ball(new Vec2(old.center.x + 20, old.center.y + 12),
                 old.radius, old.number, false));
-        assertFalse(detector.detect(balls, table).detected);
+        assertFalse(detector.detect(balls, table()).detected);
     }
 
     @Test public void rejectsIncompleteRack() {
@@ -36,7 +51,7 @@ public class DiamondRackDetectorTest {
 
     private TableGeometry table() {
         return PlatoTableCalibration.fromDetectedFeltBounds(
-                115, 160, 494, 903, 611, 1024);
+                112, 159, 495, 904, 611, 1024);
     }
 
     private List<Ball> diamond(double centerX, double centerY, double radius) {

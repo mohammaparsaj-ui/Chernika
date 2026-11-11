@@ -9,32 +9,41 @@ public class BallColorClassifierTest {
     private final BallColorClassifier classifier = new BallColorClassifier();
 
     @Test public void readsSolidYellowOneBall() {
-        BallColorClassifier.Result result = classifier.classify(
-                ballImage(0xFFFFC400, false), 40, 40, 20, 20, 12);
-        assertEquals(1, result.number);
-        assertTrue(result.confidence >= 0.42);
+        assertNumber(1, 0xFFFFC400, false);
     }
 
     @Test public void readsStripedYellowNineBall() {
-        BallColorClassifier.Result result = classifier.classify(
-                ballImage(0xFFFFC400, true), 40, 40, 20, 20, 12);
-        assertEquals(9, result.number);
-        assertTrue(result.confidence >= 0.42);
+        assertNumber(9, 0xFFFFC400, true);
     }
 
     @Test public void separatesBrightRedThreeFromDarkMaroonSeven() {
-        BallColorClassifier.Result three = classifier.classify(
-                ballImage(0xFFE51B23, false), 40, 40, 20, 20, 12);
-        BallColorClassifier.Result seven = classifier.classify(
-                ballImage(0xFF68121B, false), 40, 40, 20, 20, 12);
-        assertEquals(3, three.number);
-        assertEquals(7, seven.number);
+        assertNumber(3, 0xFFE51B23, false);
+        assertNumber(7, 0xFF624C39, false);
+    }
+
+    @Test public void separatesBrightOrangeFiveFromDarkMaroonSeven() {
+        assertNumber(5, 0xFFBE6948, false);
+        assertNumber(7, 0xFF624C39, false);
+    }
+
+    @Test public void readsGreenSixBall() {
+        assertNumber(6, 0xFF435327, false);
+    }
+
+    @Test public void readsBlueTwoAndPurpleFour() {
+        assertNumber(2, 0xFF414B7B, false);
+        assertNumber(4, 0xFF4E4274, false);
     }
 
     @Test public void readsBlackEightBall() {
+        assertNumber(8, 0xFF101010, false);
+    }
+
+    private void assertNumber(int expected, int shellColor, boolean stripe) {
         BallColorClassifier.Result result = classifier.classify(
-                ballImage(0xFF101010, false), 40, 40, 20, 20, 12);
-        assertEquals(8, result.number);
+                ballImage(shellColor, stripe), 40, 40, 20, 20, 12);
+        assertEquals(expected, result.number);
+        assertTrue(result.confidence >= 0.42);
     }
 
     private int[] ballImage(int shellColor, boolean stripe) {
