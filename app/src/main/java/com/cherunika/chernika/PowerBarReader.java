@@ -13,8 +13,10 @@ final class PowerBarReader {
     private PowerBar detectVertical(Bitmap bitmap) {
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
+        // Plato's portrait power meter sits in the narrow left HUD gutter.
+        // Stop before the wooden table rail, which is also highly saturated.
         int xStart = Math.max(0, (int) (width * 0.015));
-        int xEnd = Math.min(width, (int) (width * 0.18));
+        int xEnd = Math.min(width, (int) (width * 0.13));
         int yStart = Math.max(0, (int) (height * 0.42));
         int yEnd = Math.min(height, (int) (height * 0.91));
         if (xEnd <= xStart || yEnd <= yStart) return null;
