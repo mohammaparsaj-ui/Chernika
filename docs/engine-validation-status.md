@@ -1,8 +1,8 @@
-# Chernika 7.1 development status — instruction-first dry run
+# Chernika 7.2 development status — instruction-first dry run
 
 **Branch:** `feature/9ball-instruction-first-v1`  
 **Pull request:** #5 (draft)  
-**Build version:** `7.1-dev-dry-run`  
+**Build version:** `7.2-dev-dry-run`  
 **Package:** `com.cherunika.chernika`
 
 ## Implemented
@@ -30,22 +30,38 @@ A cropped frame from the user's Plato recording is now included as a compact tes
 
 See `docs/green-6-vision-regression.md` for the detector parameters, fixture description and limitations.
 
+## Six-pocket refinement result
+
+The pocket refiner was checked against the complete 720 × 1216 recorded gameplay frame at approximately 270 seconds, using the existing measured table bounds. All six pocket openings refined successfully in the full-frame offline probe. Observed confidence scores were:
+
+- Top-left: 0.921
+- Top-right: 0.926
+- Middle-left: 0.913
+- Middle-right: 0.913
+- Bottom-left: 0.919
+- Bottom-right: 0.924
+
+All six are above the engine's 0.72 planning gate. An automated JVM regression test also uses six actual 40 × 40 pocket crops from that frame, placed at their scaled calibrated coordinates in a compact 320 × 540 fixture; it asserts all six refine above 0.72 and remain within 2 px of their calibrated anchors. This validates local pocket-opening refinement, not automatic full-screen table-bound detection.
+
+See `docs/pocket-vision-regression.md` for the fixture construction, measured scores and limits.
+
 ## Verification
 
 Verified using JDK 17.0.21, Gradle 9.6.0, Android SDK Platform 35 and Android Build Tools 36.0.0:
 
 - `gradle --no-daemon clean testDebugUnitTest assembleDebug` — **BUILD SUCCESSFUL**.
-- **51 JVM tests passed; 0 failures; 0 errors; 0 skipped.**
+- **52 JVM tests passed; 0 failures; 0 errors; 0 skipped.**
   - Existing project tests: 29.
   - Instruction-first parser and engine tests: 18.
   - Green-6 edge detector regression tests: 4.
+  - Recorded six-pocket refinement regression: 1.
 - APK package inspection confirms:
   - `com.cherunika.chernika`
-  - versionCode `71`
-  - versionName `7.1-dev-dry-run`
+  - versionCode `72`
+  - versionName `7.2-dev-dry-run`
   - minSdk `30`
   - targetSdk `35`
-- Debug APK SHA-256: `bf19aa9e1dceaa0b107648b823e66e73932e7679fb841a2313a4ffca289e97c7`.
+- Debug APK SHA-256: pending final 7.2 package build.
 
 No Android device or emulator was attached to the build environment, so this verification is a JVM/build check, not a live Plato gameplay test.
 
@@ -53,7 +69,7 @@ No Android device or emulator was attached to the build environment, so this ver
 
 This is not an autonomous-play release.
 
-1. The pocket detector must refine all six pocket anchors to the engine's confidence threshold. Otherwise it correctly returns WAIT.
+1. All six pocket anchors pass the 0.72 confidence gate in one static recorded frame (0.913–0.926 in the full-frame probe). Broader validation across other matches, screen sizes, motion and occlusion is still required; otherwise the engine correctly returns WAIT.
 2. Ball-number OCR currently accepts only a single unambiguous digit and assigns a conservative provisional confidence. This confidence has not yet been calibrated on a labelled set of Plato ball crops.
 3. The adapter's inventory-complete flag checks that detected candidates have unique readable numbers. It does **not** prove detector recall. The green 6 is recovered in one rack regression frame, but general recall across lighting, motion, occlusion and screen sizes remains unmeasured.
 4. Stable-frame tracking compares detected ball centers across screenshots. It has not yet been validated against slow residual ball motion.
@@ -65,7 +81,7 @@ The engine must remain dry-run until ball inventory recall, pocket calibration, 
 
 ## Next engineering steps
 
-1. Expand the labelled frame set beyond the single rack crop, including green 6 in different positions, lighting, overlap and motion.
+1. Expand the labelled frame set beyond the single rack and pocket frames, including green 6 and all six pockets under different positions, lighting, overlap and motion.
 2. Measure ball and pocket detection precision/recall and calibrate OCR confidence.
 3. Validate six-pocket refinement on complete table screenshots.
 4. Add motion-settled verification using consecutive frames and post-shot state changes.
