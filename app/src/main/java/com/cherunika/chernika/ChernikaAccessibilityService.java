@@ -33,6 +33,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private final VisionAnalyzer vision = new VisionAnalyzer();
     private final TargetAnnouncementParser parser = new TargetAnnouncementParser();
     private final ShotPlanner planner = new ShotPlanner();
+    private final LowestBallSelector lowestBallSelector = new LowestBallSelector();
+    private final DiamondRackDetector rackDetector = new DiamondRackDetector();
     private TextRecognizer recognizer;
     private long lastShotAt = 0;
     private long lastCaptureRequestAt = 0;
@@ -79,13 +81,15 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     }
 
     private boolean isEngineEnabled() {
-        return getSharedPreferences("chernika", MODE_PRIVATE).getBoolean("engine_enabled", false);
+        return getSharedPreferences("chernika", MODE_PRIVATE)
+                .getBoolean("engine_enabled", false);
     }
 
     private void captureFrame() {
         long now = System.currentTimeMillis();
         if (now - lastCaptureRequestAt < 1000) return;
-        if (Build.VERSION.SDK_INT < 30 || recognizer == null || !captureBusy.compareAndSet(false, true)) return;
+        if (Build.VERSION.SDK_INT < 30 || recognizer == null
+                || !captureBusy.compareAndSet(false, true)) return;
         lastCaptureRequestAt = now;
         try {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
@@ -114,7 +118,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
 
                 @Override public void onFailure(int errorCode) {
                     captureBusy.set(false);
-                    setStatus("Screen capture unavailable (code " + errorCode + "). Check Android accessibility permission.");
+                    setStatus("Screen capture unavailable (code " + errorCode
+                            + "). Check Android accessibility permission.");
                 }
             });
         } catch (Throwable t) {
@@ -126,7 +131,10 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private void processFrame(Bitmap bitmap) {
         recognizer.process(InputImage.fromBitmap(bitmap, 0))
                 .addOnSuccessListener(text -> {
-                    if (!isEngineEnabled()) { finishCapture(bitmap); return; }
+                    if (!isEngineEnabled()) {
+                        finishCapture(bitmap);
+                        return;
+                    }
                     String visibleText = text == null ? "" : text.getText();
                     TargetAnnouncement announcement = parser.parse(visibleText);
                     FrameState frame = vision.analyze(bitmap);
@@ -148,7 +156,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         captureBusy.set(false);
     }
 
-    private void readBallNumbers(Bitmap bitmap, FrameState frame, TargetAnnouncement announcement, Runnable finished) {
+    private void readBallNumbers(Bitmap bitmap, FrameState frame,
+                                 TargetAnnouncement announcement, Runnable finished) {
         List<Ball> candidates = new ArrayList<>();
         for (Ball ball : frame.balls) if (!ball.cue) candidates.add(ball);
         if (candidates.size() > 12) candidates = candidates.subList(0, 12);
@@ -158,21 +167,41 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         Tasks.whenAllComplete(tasks).addOnSuccessListener(done -> {
             for (int i = 0; i < tasks.size(); i++) {
                 Task<Integer> task = tasks.get(i);
-                if (task.isSuccessful() && task.getResult() != null) finalCandidates.get(i).number = task.getResult();
+                if (task.isSuccessful() && task.getResult() != null
+                        && task.getResult() >= 1 && task.getResult() <= 9) {
+                    finalCandidates.get(i).applyOcrNumber(task.getResult());
+                }
             }
-            if (!isEngineEnabled()) { finished.run(); return; }
+            if (!isEngineEnabled()) {
+                finished.run();
+                return;
+            }
             if (announcement.scratch) {
                 handleScratch(frame, announcement);
                 finished.run();
                 return;
             }
-            ShotPlan plan = announcement.hasTarget()
-                    ? planner.plan(frame, announcement.legalBall, announcement.objectiveBall)
-                    : planner.planBreak(frame);
+
+            ShotPlan plan = null;
+            if (announcement.hasTarget()) {
+                plan = planner.plan(frame, announcement.legalBall, announcement.objectiveBall);
+            } else {
+                DiamondRackDetector.Result rack = rackDetector.detect(frame.balls, frame.table);
+                if (rack.detected) {
+                    plan = planner.planBreak(frame);
+                } else {
+                    LowestBallSelector.Selection selection =
+                            lowestBallSelector.select(frame.balls, 0);
+                    if (selection.isConfident()) {
+                        plan = planner.plan(frame, selection.number, 0);
+                    }
+                }
+            }
+
             if (plan == null) {
                 setStatus(announcement.hasTarget()
-                        ? "Target " + announcement.legalBall + " read; waiting for ball-number OCR and a clear route."
-                        : "Monitoring the rack; waiting for a reliable break setup or target announcement.");
+                        ? "HUD target read; waiting for that ball and a clear pocket route."
+                        : "Waiting for a verified diamond rack or a confident lowest-ball color read.");
                 finished.run();
                 return;
             }
@@ -193,12 +222,14 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             int bottom = Math.min(source.getHeight(), (int) ball.center.y + radius);
             if (right - left < 4 || bottom - top < 4) return Tasks.forResult(0);
             Bitmap crop = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
-            Bitmap enlarged = Bitmap.createScaledBitmap(crop, crop.getWidth() * 4, crop.getHeight() * 4, true);
+            Bitmap enlarged = Bitmap.createScaledBitmap(crop,
+                    crop.getWidth() * 4, crop.getHeight() * 4, true);
             crop.recycle();
             return recognizer.process(InputImage.fromBitmap(enlarged, 0)).continueWith(task -> {
                 int number = 0;
                 if (task.isSuccessful() && task.getResult() != null) {
-                    Matcher matcher = Pattern.compile("(?<!\\d)([1-9])(?!\\d)").matcher(task.getResult().getText());
+                    Matcher matcher = Pattern.compile("(?<!\\d)([1-9])(?!\\d)")
+                            .matcher(task.getResult().getText());
                     if (matcher.find()) number = Integer.parseInt(matcher.group(1));
                 }
                 enlarged.recycle();
@@ -223,13 +254,16 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             setStatus("Scratch detected, but a clear potting route already exists. Keeping the cue ball in place.");
             return;
         }
-        Vec2 placement = planner.bestCuePlacement(frame, announcement.legalBall, announcement.objectiveBall);
-        if (placement == null || placement.distance(frame.cueBall.center) < frame.cueBall.radius * 1.5) {
+        Vec2 placement = planner.bestCuePlacement(frame,
+                announcement.legalBall, announcement.objectiveBall);
+        if (placement == null
+                || placement.distance(frame.cueBall.center) < frame.cueBall.radius * 1.5) {
             setStatus("Scratch detected. No safe cue-ball placement found; waiting.");
             return;
         }
         dispatchDrag(frame.cueBall.center, placement, 420, success -> {
-            setStatus(success ? "Cue-ball placement gesture sent. Rechecking the table." : "Cue-ball placement gesture failed.");
+            setStatus(success ? "Cue-ball placement gesture sent. Rechecking the table."
+                    : "Cue-ball placement gesture failed.");
         });
     }
 
@@ -238,16 +272,23 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             setStatus("Route found; waiting for cue ball and power-bar detection.");
             return;
         }
-        String targetKey = plan.breakShot ? "break" : String.valueOf(announcement.legalBall);
-        String pocketKey = plan.pocket == null ? "rack" : Math.round(plan.pocket.center.x / 12) + ":" + Math.round(plan.pocket.center.y / 12);
+        String targetKey = plan.breakShot ? "break" : String.valueOf(plan.target.number);
+        String pocketKey = plan.pocket == null ? "rack"
+                : Math.round(plan.pocket.center.x / 12) + ":"
+                    + Math.round(plan.pocket.center.y / 12);
         String signature = targetKey + ":" + Math.round(frame.cueBall.center.x / 12) + ":"
-                + Math.round(frame.cueBall.center.y / 12) + ":" + Math.round(plan.target.center.x / 12) + ":"
+                + Math.round(frame.cueBall.center.y / 12) + ":"
+                + Math.round(plan.target.center.x / 12) + ":"
                 + Math.round(plan.target.center.y / 12) + ":" + pocketKey;
         long now = System.currentTimeMillis();
         if (signature.equals(lastShotSignature) || now - lastShotAt < 2400) return;
 
-        String route = plan.breakShot ? "Break" : (plan.comboShot ? "9-ball combo route" : (plan.bankShot ? "Bank route" : "Direct route"));
-        setStatus(String.format(Locale.US, "%s calculated. Power %.0f%%. Sending aim input.", route, plan.powerPercent));
+        String route = plan.breakShot ? "Diamond-rack break"
+                : (plan.comboShot ? "9-ball combo route"
+                : (plan.bankShot ? "Bank route" : "Direct route"));
+        setStatus(String.format(Locale.US,
+                "%s calculated. Power %.0f%%. Sending cue alignment.",
+                route, plan.powerPercent));
         dispatchAim(frame.cueBall.center, plan.aimPoint, success -> {
             if (!success || !isEngineEnabled()) {
                 setStatus("Aim input was not accepted; staying in monitor mode.");
@@ -255,18 +296,17 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             }
             handler.postDelayed(() -> {
                 if (!isEngineEnabled()) return;
-                float fraction = (float) Math.max(0.05, Math.min(1.0, plan.powerPercent / 100.0));
-                float targetX = frame.powerBar.left + (frame.powerBar.right - frame.powerBar.left) * fraction;
-                dispatchDrag(new Vec2(frame.powerBar.left + 2, frame.powerBar.y),
-                        new Vec2(targetX, frame.powerBar.y), 320, fired -> {
-                            if (fired) {
-                                lastShotSignature = signature;
-                                lastShotAt = System.currentTimeMillis();
-                                setStatus("Shot input sent. Continuous monitoring remains active.");
-                            } else {
-                                setStatus("Power input failed. Monitoring without repeating the same shot.");
-                            }
-                        });
+                Vec2 powerStart = frame.powerBar.startPoint();
+                Vec2 powerTarget = frame.powerBar.pointForPower(plan.powerPercent);
+                dispatchDrag(powerStart, powerTarget, 320, fired -> {
+                    if (fired) {
+                        lastShotSignature = signature;
+                        lastShotAt = System.currentTimeMillis();
+                        setStatus("Shot input sent. Continuous table monitoring remains active.");
+                    } else {
+                        setStatus("Power input failed. Monitoring without repeating the same shot.");
+                    }
+                });
             }, 260);
         });
     }
@@ -285,8 +325,12 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         GestureDescription gesture = new GestureDescription.Builder()
                 .addStroke(new GestureDescription.StrokeDescription(path, 0, 90)).build();
         boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
-            @Override public void onCompleted(GestureDescription gestureDescription) { callback.complete(true); }
-            @Override public void onCancelled(GestureDescription gestureDescription) { callback.complete(false); }
+            @Override public void onCompleted(GestureDescription gestureDescription) {
+                callback.complete(true);
+            }
+            @Override public void onCancelled(GestureDescription gestureDescription) {
+                callback.complete(false);
+            }
         }, handler);
         if (!accepted) callback.complete(false);
     }
@@ -295,11 +339,16 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         Path path = new Path();
         path.moveTo((float) from.x, (float) from.y);
         path.lineTo((float) to.x, (float) to.y);
-        GestureDescription.StrokeDescription stroke = new GestureDescription.StrokeDescription(path, 0, durationMs);
+        GestureDescription.StrokeDescription stroke =
+                new GestureDescription.StrokeDescription(path, 0, durationMs);
         GestureDescription gesture = new GestureDescription.Builder().addStroke(stroke).build();
         boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
-            @Override public void onCompleted(GestureDescription gestureDescription) { callback.complete(true); }
-            @Override public void onCancelled(GestureDescription gestureDescription) { callback.complete(false); }
+            @Override public void onCompleted(GestureDescription gestureDescription) {
+                callback.complete(true);
+            }
+            @Override public void onCancelled(GestureDescription gestureDescription) {
+                callback.complete(false);
+            }
         }, handler);
         if (!accepted) callback.complete(false);
     }
@@ -309,16 +358,33 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         if (!frame.hasUsableTable()) return "Monitoring screen. Table geometry not confidently detected yet.";
         int objectBalls = 0;
         for (Ball ball : frame.balls) if (!ball.cue) objectBalls++;
-        if (!announcement.hasTarget()) return "Table detected; " + objectBalls + " ball candidates. Checking for the opening rack.";
+
+        if (!announcement.hasTarget()) {
+            DiamondRackDetector.Result rack = rackDetector.detect(frame.balls, frame.table);
+            if (rack.detected) {
+                return "Table and six pockets detected · 9-ball diamond rack verified · "
+                        + String.format(Locale.US, "%.0f%% rack fit", rack.confidence * 100.0);
+            }
+            LowestBallSelector.Selection selection = lowestBallSelector.select(frame.balls, 0);
+            if (selection.isConfident()) {
+                return "Table detected · lowest ball #" + selection.number
+                        + " selected from color · " + objectBalls + " object-ball candidates.";
+            }
+        }
+
         return "Table detected; target: Hit " + announcement.legalBall
-                + " · pocket objective: " + (announcement.objectiveBall == 0 ? "not read" : announcement.objectiveBall)
+                + " · pocket objective: "
+                + (announcement.objectiveBall == 0 ? "not read" : announcement.objectiveBall)
                 + " · ball candidates: " + objectBalls
                 + " · pocket vision: " + frame.refinedPocketCount + "/6"
                 + (frame.ballRadiusRefined ? " · ball scale refined" : " · ball scale uses reference")
-                + (frame.powerBar == null ? " · power bar not found" : " · power bar found");
+                + (frame.powerBar == null ? " · power bar not found"
+                    : " · " + frame.powerBar.orientation.name().toLowerCase(Locale.ROOT)
+                    + " power bar found");
     }
 
     private void setStatus(String message) {
-        getSharedPreferences("chernika", MODE_PRIVATE).edit().putString("last_status", message).apply();
+        getSharedPreferences("chernika", MODE_PRIVATE)
+                .edit().putString("last_status", message).apply();
     }
 }

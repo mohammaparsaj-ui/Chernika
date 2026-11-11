@@ -11,6 +11,7 @@ final class VisionAnalyzer {
     private static final int MAX_ANALYSIS_WIDTH = 900;
     private final PowerBarReader powerReader = new PowerBarReader();
     private final PocketVisionRefiner pocketRefiner = new PocketVisionRefiner();
+    private final BallColorClassifier colorClassifier = new BallColorClassifier();
 
     FrameState analyze(Bitmap source) {
         FrameState frame = new FrameState(source.getWidth(), source.getHeight());
@@ -35,22 +36,27 @@ final class VisionAnalyzer {
             }
         }
         int dominantBin = 0;
-        for (int i = 1; i < hueHistogram.length; i++) if (hueHistogram[i] > hueHistogram[dominantBin]) dominantBin = i;
+        for (int i = 1; i < hueHistogram.length; i++) {
+            if (hueHistogram[i] > hueHistogram[dominantBin]) dominantBin = i;
+        }
         float dominantHue = dominantBin * 10f + 5f;
 
         int[] rows = new int[h];
         int[] cols = new int[w];
         long red = 0, green = 0, blue = 0;
         int feltSamples = 0;
-        for (int y = 0; y < h; y += 1) {
-            for (int x = 0; x < w; x += 1) {
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
                 int c = pixels[y * w + x];
                 Color.colorToHSV(c, hsv);
                 if (isFelt(hsv, dominantHue)) {
                     rows[y]++;
                     cols[x]++;
                     if (x > w * 0.2 && x < w * 0.8 && y > h * 0.2 && y < h * 0.8) {
-                        red += Color.red(c); green += Color.green(c); blue += Color.blue(c); feltSamples++;
+                        red += Color.red(c);
+                        green += Color.green(c);
+                        blue += Color.blue(c);
+                        feltSamples++;
                     }
                 }
             }
@@ -79,7 +85,6 @@ final class VisionAnalyzer {
                     left * sx, top * sy, right * sx, bottom * sy,
                     source.getWidth(), source.getHeight());
         } catch (IllegalArgumentException invalidGeometry) {
-            // Never let a weak green-region match become a shot-planning surface.
             recycleAnalysisBitmap(scaled, source);
             return frame;
         }
@@ -96,16 +101,14 @@ final class VisionAnalyzer {
             int fr = (int) (red / feltSamples);
             int fg = (int) (green / feltSamples);
             int fb = (int) (blue / feltSamples);
-            detectBalls(frame, pixels, w, h, left, top, right, bottom, sx, sy, fr, fg, fb);
+            detectBalls(frame, pixels, w, h, left, top, right, bottom,
+                    sx, sy, fr, fg, fb);
         }
         recycleAnalysisBitmap(scaled, source);
         return frame;
     }
 
     private void recycleAnalysisBitmap(Bitmap scaled, Bitmap source) {
-        // Android may return the source object unchanged when no resize is
-        // needed. Never recycle the caller-owned screenshot bitmap: the
-        // accessibility service still needs it for OCR crops after analysis.
         if (scaled != source && !scaled.isRecycled()) scaled.recycle();
     }
 
@@ -142,8 +145,6 @@ final class VisionAnalyzer {
         boolean[] visited = new boolean[w * h];
         double analysisScale = (sx + sy) / 2.0;
         double expectedDiameter = 2.0 * frame.table.referenceBallRadius / analysisScale;
-        // Use the measured Plato ball-size prior to reject UI fragments and
-        // large connected regions before treating them as ball candidates.
         double minDim = Math.max(4.0, expectedDiameter * 0.45);
         double maxDim = Math.max(minDim + 2.0, expectedDiameter * 1.35);
         List<Double> observedRadii = new ArrayList<>();
@@ -151,7 +152,8 @@ final class VisionAnalyzer {
             for (int x = left + 2; x < right - 2; x++) {
                 int c = pixels[y * w + x];
                 int r = Color.red(c), g = Color.green(c), b = Color.blue(c);
-                double dist = Math.sqrt((r - fr) * (r - fr) + (g - fg) * (g - fg) + (b - fb) * (b - fb));
+                double dist = Math.sqrt((r - fr) * (r - fr)
+                        + (g - fg) * (g - fg) + (b - fb) * (b - fb));
                 float value = Math.max(r, Math.max(g, b)) / 255f;
                 if (dist > 78 && value > 0.15f) mask[y * w + x] = true;
             }
@@ -174,15 +176,22 @@ final class VisionAnalyzer {
                     int at = queue.removeFirst();
                     int px = at % w, py = at / w;
                     int color = pixels[at];
-                    sumR += Color.red(color); sumG += Color.green(color); sumB += Color.blue(color);
+                    sumR += Color.red(color);
+                    sumG += Color.green(color);
+                    sumB += Color.blue(color);
                     count++;
-                    minX = Math.min(minX, px); maxX = Math.max(maxX, px);
-                    minY = Math.min(minY, py); maxY = Math.max(maxY, py);
+                    minX = Math.min(minX, px);
+                    maxX = Math.max(maxX, px);
+                    minY = Math.min(minY, py);
+                    maxY = Math.max(maxY, py);
                     for (int k = 0; k < 4; k++) {
                         int nx = px + dx[k], ny = py + dy[k];
                         if (nx <= left || nx >= right || ny <= top || ny >= bottom) continue;
                         int ni = ny * w + nx;
-                        if (mask[ni] && !visited[ni]) { visited[ni] = true; queue.addLast(ni); }
+                        if (mask[ni] && !visited[ni]) {
+                            visited[ni] = true;
+                            queue.addLast(ni);
+                        }
                     }
                 }
                 int bw = maxX - minX + 1;
@@ -193,17 +202,29 @@ final class VisionAnalyzer {
                 if (count < 5 || count > 900 || diameter < minDim || diameter > maxDim
                         || aspect < 0.58 || aspect > 1.72
                         || fillRatio < 0.20 || fillRatio > 0.99) continue;
-                double cx = (minX + maxX) / 2.0 * sx;
-                double cy = (minY + maxY) / 2.0 * sy;
-                double radius = diameter * (sx + sy) / 4.0;
+
+                double centerX = (minX + maxX) / 2.0;
+                double centerY = (minY + maxY) / 2.0;
+                double radiusInAnalysisPixels = diameter / 2.0;
                 float[] avgHsv = new float[3];
-                int avg = Color.rgb((int) (sumR / count), (int) (sumG / count), (int) (sumB / count));
+                int avg = Color.rgb((int) (sumR / count),
+                        (int) (sumG / count), (int) (sumB / count));
                 Color.colorToHSV(avg, avgHsv);
                 boolean cue = avgHsv[1] < 0.28f && avgHsv[2] > 0.60f;
-                Ball ball = new Ball(new Vec2(cx, cy), radius, 0, cue);
+
+                BallColorClassifier.Result color = cue
+                        ? BallColorClassifier.Result.unknown()
+                        : colorClassifier.classify(pixels, w, h,
+                                centerX, centerY, radiusInAnalysisPixels);
+                double sourceRadius = radiusInAnalysisPixels * analysisScale;
+                Ball ball = new Ball(
+                        new Vec2(centerX * sx, centerY * sy),
+                        sourceRadius, 0, cue, color.number, color.confidence);
                 frame.balls.add(ball);
-                observedRadii.add(radius);
-                if (cue && (frame.cueBall == null || avgHsv[2] > 0.65f)) frame.cueBall = ball;
+                observedRadii.add(sourceRadius);
+                if (cue && (frame.cueBall == null || avgHsv[2] > 0.65f)) {
+                    frame.cueBall = ball;
+                }
                 if (frame.balls.size() >= 20) break scan;
             }
         }
