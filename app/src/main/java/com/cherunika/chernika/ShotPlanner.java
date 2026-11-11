@@ -46,14 +46,14 @@ final class ShotPlanner {
         Vec2 firstToNine = nine.center.subtract(first.center).normalized();
         Vec2 ghost = first.center.subtract(firstToNine.scale(first.radius + nine.radius));
         if (!frame.table.contains(ghost, first.radius * 1.2)) return null;
-        if (!clearPath(frame, frame.cueBall.center, ghost,
+        if (!clearPath(frame.cueBall.center, ghost,
                 frame.balls, frame.cueBall, first, first.radius * 2.0)) return null;
-        if (!clearPath(frame, first.center, nine.center,
+        if (!clearPath(first.center, nine.center,
                 frame.balls, first, nine, first.radius * 1.8)) return null;
 
         ShotPlan best = null;
         for (Pocket pocket : frame.table.pockets()) {
-            if (!clearPath(frame, nine.center, pocket.center,
+            if (!clearPath(nine.center, pocket.center,
                     frame.balls, nine, first, nine.radius * 2.0)) continue;
             double cueDistance = tableDistance(frame.table, frame.cueBall.center, ghost);
             double comboDistance = tableDistance(frame.table, first.center, nine.center);
@@ -124,19 +124,19 @@ final class ShotPlanner {
         Vec2 targetVector = virtualPocket.subtract(target.center).normalized();
         Vec2 ghost = target.center.subtract(targetVector.scale(target.radius * 2.05));
         if (!frame.table.contains(ghost, target.radius * 1.2)) return null;
-        if (!clearPath(frame, frame.cueBall.center, ghost,
+        if (!clearPath(frame.cueBall.center, ghost,
                 frame.balls, frame.cueBall, target, target.radius * 2.1)) return null;
 
         double objectDistance;
         if (!bank) {
-            if (!clearPath(frame, target.center, pocket.center,
+            if (!clearPath(target.center, pocket.center,
                     frame.balls, target, frame.cueBall, target.radius * 2.05)) return null;
             objectDistance = tableDistance(frame.table, target.center, pocket.center);
         } else {
             if (bounce == null
-                    || !clearPath(frame, target.center, bounce,
+                    || !clearPath(target.center, bounce,
                         frame.balls, target, frame.cueBall, target.radius * 2.05)
-                    || !clearPath(frame, bounce, pocket.center,
+                    || !clearPath(bounce, pocket.center,
                         frame.balls, target, frame.cueBall, target.radius * 2.05)) return null;
             objectDistance = tableDistance(frame.table, target.center, bounce)
                     + tableDistance(frame.table, bounce, pocket.center);
@@ -193,10 +193,10 @@ final class ShotPlanner {
         return new Vec2(x, y);
     }
 
-    private boolean clearPath(FrameState frame, Vec2 a, Vec2 b,
+    private boolean clearPath(Vec2 a, Vec2 b,
                               List<Ball> balls, Ball skipA, Ball skipB, double clearance) {
         for (Ball ball : balls) {
-            if (ball == skipA || ball == skipB) continue;
+            if (ball == skipA || ball == skipB || ball.cue) continue;
             if (distanceToSegment(ball.center, a, b) < ball.radius + clearance) return false;
         }
         return true;
