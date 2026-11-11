@@ -77,7 +77,7 @@ final class OpenCvBallDetector {
                 // The 6-ball is green, but the felt is green too. Its shell is
                 // substantially darker than the calibrated cloth; reject bright
                 // green aim rings and felt highlights that Hough also sees.
-                if (!cue && color.number == 6 && center[1] > 0.55) continue;
+                if (!cue && color.number == 6 && (center[1] > 0.46 || center[0] < 0.40)) continue;
 
                 Ball candidate = new Ball(sourceCenter, sourceRadius,
                         cue ? 0 : color.number, cue,
