@@ -82,6 +82,13 @@ final class VisionAnalyzer {
             return frame;
         }
 
+        // The hue mask trims roughly two edge pixels from the green cloth.
+        // Restore that measured edge so the static six-pocket template aligns
+        // with the full table reference rather than the inner mask boundary.
+        int horizontalEdgePad = Math.max(1, (int) Math.round(w * 0.003));
+        left = Math.max(0, left - horizontalEdgePad);
+        right = Math.min(w - 1, right + horizontalEdgePad);
+
         double sx = source.getWidth() / (double) w;
         double sy = source.getHeight() / (double) h;
         try {
@@ -107,7 +114,16 @@ final class VisionAnalyzer {
             int fb = (int) (blue / feltSamples);
             boolean circleVision = openCvBallDetector.detect(
                     scaled, frame, sx, sy, pixels, w, h);
-            if (circleVision) {
+            int objectBallCount = 0;
+            for (Ball ball : frame.balls) if (!ball.cue) objectBallCount++;
+            if (!circleVision || objectBallCount == 0 || frame.cueBall == null) {
+                // Do not accept a partial Hough result as a complete game state.
+                // Fall back to the guarded component/rack-template detector.
+                frame.balls.clear();
+                frame.cueBall = null;
+                detectBalls(frame, pixels, w, h, left, top, right, bottom,
+                        sx, sy, fr, fg, fb);
+            } else {
                 List<Double> observedRadii = new ArrayList<>();
                 for (Ball ball : frame.balls) observedRadii.add(ball.radius);
                 addMeasuredRackBalls(frame, pixels, w, h, sx, sy, observedRadii);
@@ -119,9 +135,6 @@ final class VisionAnalyzer {
                             frame.table.pockets(), estimate.radius, estimate.uncertainty);
                     frame.ballRadiusRefined = true;
                 }
-            } else {
-                detectBalls(frame, pixels, w, h, left, top, right, bottom,
-                        sx, sy, fr, fg, fb);
             }
         }
         recycleAnalysisBitmap(scaled, source);
