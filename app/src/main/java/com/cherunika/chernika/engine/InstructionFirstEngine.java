@@ -101,7 +101,7 @@ public final class InstructionFirstEngine {
         int cueCount = 0;
         Set<Integer> numbers = new HashSet<>();
         for (BallObservation ball : observation.balls) {
-            if (ball == null || ball.confidence < MIN_BALL_CONFIDENCE
+            if (ball == null || ball.detectionConfidence < MIN_BALL_CONFIDENCE
                     || !observation.playableBounds.contains(ball.center, ball.radius * 0.75)) {
                 return "A ball is uncertain or outside the calibrated playable surface.";
             }
@@ -110,6 +110,9 @@ public final class InstructionFirstEngine {
             } else {
                 if (ball.number < 1 || ball.number > 9) {
                     return "An object ball has no reliable number; color alone is insufficient.";
+                }
+                if (ball.identityConfidence < MIN_BALL_CONFIDENCE) {
+                    return "Ball " + ball.number + " identity confidence is below the planner threshold.";
                 }
                 if (!numbers.add(ball.number)) {
                     return "Duplicate detection for ball " + ball.number + ".";

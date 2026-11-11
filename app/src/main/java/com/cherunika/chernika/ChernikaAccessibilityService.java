@@ -12,6 +12,7 @@ import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 
 import com.cherunika.chernika.engine.BallObservation;
+import com.cherunika.chernika.engine.BallStateTracker;
 import com.cherunika.chernika.engine.EngineDecision;
 import com.cherunika.chernika.engine.GameObservation;
 import com.cherunika.chernika.engine.HudInstruction;
@@ -29,12 +30,9 @@ import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -56,7 +54,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private long lastCaptureRequestAt;
     private boolean loopStarted;
     private int stableFrames;
-    private Map<String, Vec2> previousPositions = new HashMap<>();
+    private final BallStateTracker ballStateTracker = new BallStateTracker();
+    private String trackingStatus = "Waiting for a full rack baseline.";
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
@@ -93,6 +92,7 @@ public class ChernikaAccessibilityService extends AccessibilityService {
 
     @Override public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        ballStateTracker.reset();
         if (recognizer != null) recognizer.close();
         super.onDestroy();
     }
@@ -238,6 +238,7 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         EngineDecision decision = engine.evaluate(observation);
         if (decision.status == EngineDecision.Status.WAIT) {
             setStatus("DRY RUN · WAIT\n" + decision.reason
+                    + "\nTracking: " + trackingStatus
                     + "\nStable frames: " + stableFrames
                     + " · refined pockets: " + frame.refinedPocketCount + "/6"
                     + "\nNo touch gestures are sent by this build.");
@@ -269,85 +270,35 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             }
         }
 
-        List<BallObservation> balls = new ArrayList<>();
+        List<BallObservation> rawBalls = new ArrayList<>();
         for (Ball ball : frame.balls) {
-            double confidence = ball.cue
-                    ? ball.detectionConfidence
-                    : Math.min(ball.detectionConfidence, ball.numberConfidence);
-            balls.add(new BallObservation(
+            rawBalls.add(new BallObservation(
                     new Point2(ball.center.x, ball.center.y),
-                    ball.radius, ball.cue ? 0 : ball.number,
-                    ball.cue, confidence));
+                    ball.radius,
+                    ball.cue ? 0 : ball.number,
+                    ball.cue,
+                    ball.detectionConfidence,
+                    ball.cue ? 1.0 : ball.numberConfidence));
         }
 
         HudInstruction instruction = hudParser.parse(visibleText);
         boolean replay = isReplayOrResultsScreen(visibleText);
+        if (replay) ballStateTracker.reset();
+        BallStateTracker.Result tracked = ballStateTracker.update(
+                replay ? Collections.emptyList() : rawBalls, pockets);
+        List<BallObservation> balls = tracked.balls;
+        stableFrames = tracked.consecutiveStableFrames;
+        trackingStatus = tracked.reason;
+
         boolean live = !replay && (instruction.type == HudInstruction.Type.HIT_BALL
                 || instruction.type == HudInstruction.Type.POCKET_BALL
                 || instruction.type == HudInstruction.Type.BALL_IN_HAND);
-        int stable = updateStability(frame);
-        boolean inventoryComplete = hasNumberedInventory(frame);
+        boolean inventoryComplete = tracked.inventoryComplete;
         double powerConfidence = frame.powerBar == null ? 0.0 : 0.80;
 
         return new GameObservation(bounds, tableConfidence, pockets, balls, instruction,
-                inventoryComplete, live, replay, stable < 3, stable, powerConfidence);
-    }
-
-    private boolean hasNumberedInventory(FrameState frame) {
-        int cueCount = 0;
-        int objectCount = 0;
-        Set<Integer> numbers = new HashSet<>();
-        for (Ball ball : frame.balls) {
-            if (ball.cue) {
-                cueCount++;
-            } else {
-                objectCount++;
-                if (ball.number < 1 || ball.number > 9 || ball.numberConfidence < 0.80
-                        || !numbers.add(ball.number)) return false;
-            }
-        }
-        return cueCount == 1 && objectCount >= 1 && objectCount <= 9;
-    }
-
-    private int updateStability(FrameState frame) {
-        Map<String, Vec2> current = new HashMap<>();
-        for (Ball ball : frame.balls) {
-            String key;
-            if (ball.cue) {
-                key = "cue";
-            } else {
-                if (ball.number < 1 || ball.number > 9 || current.containsKey("ball-" + ball.number)) {
-                    stableFrames = 0;
-                    previousPositions.clear();
-                    return 0;
-                }
-                key = "ball-" + ball.number;
-            }
-            if (current.put(key, ball.center) != null) {
-                stableFrames = 0;
-                previousPositions.clear();
-                return 0;
-            }
-        }
-        if (!current.containsKey("cue") || current.isEmpty()) {
-            stableFrames = 0;
-            previousPositions.clear();
-            return 0;
-        }
-
-        boolean sameInventory = current.keySet().equals(previousPositions.keySet());
-        boolean positionsStable = sameInventory;
-        if (sameInventory) {
-            for (String key : current.keySet()) {
-                if (current.get(key).distance(previousPositions.get(key)) > 2.0) {
-                    positionsStable = false;
-                    break;
-                }
-            }
-        }
-        stableFrames = positionsStable ? stableFrames + 1 : 1;
-        previousPositions = current;
-        return stableFrames;
+                inventoryComplete, live, replay, tracked.ballsMoving,
+                tracked.consecutiveStableFrames, powerConfidence);
     }
 
     private boolean isReplayOrResultsScreen(String text) {

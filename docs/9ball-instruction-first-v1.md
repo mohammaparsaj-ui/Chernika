@@ -86,9 +86,9 @@ The engine must return **WAIT** rather than shoot when any of these conditions a
 
 ## Current implementation status
 
-The instruction-first core is now connected to the Android screenshot/OCR service in **dry-run mode**. The service reports WAIT states or candidate direct shots, but it does not dispatch touch gestures. The existing legacy shot planner remains in the source tree but is no longer called by this service.
+The instruction-first core is now connected to the Android screenshot/OCR service in **dry-run mode**. A temporal ball-state tracker establishes a two-frame full-rack baseline, tracks identities and movement, and only confirms pocketing after observed movement into a confident pocket zone plus repeated absence. The service reports WAIT states or candidate direct shots, but it does not dispatch touch gestures. The existing legacy shot planner remains in the source tree but is no longer called by this service.
 
-The first Android build completed successfully and the full JVM suite passed (47 tests, 0 failures). See `docs/engine-validation-status.md` for the exact build environment, APK identity, hash and outstanding limitations.
+The Android dry-run build completed successfully and the JVM suite passed (64 tests, 0 failures). See `docs/engine-validation-status.md` for the exact build environment, APK identity, hash and outstanding limitations.
 
 **Do not enable live firing yet.** In particular, inventory recall for the green 6 ball, all-six-pocket refinement, motion-settled detection and power-bar calibration still require labelled-frame and supervised device validation.
 

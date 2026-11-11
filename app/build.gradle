@@ -10,8 +10,8 @@ android {
         applicationId 'com.cherunika.chernika'
         minSdk 30
         targetSdk 35
-        versionCode 72
-        versionName '7.2-dev-dry-run'
+        versionCode 73
+        versionName '7.3-dev-dry-run'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 

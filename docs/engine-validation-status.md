@@ -1,11 +1,13 @@
-# Chernika 7.2 development status — instruction-first dry run
+# Chernika 7.3 development status — temporal inventory dry run
 
 **Branch:** `feature/9ball-instruction-first-v1`  
 **Pull request:** #5 (draft)  
-**Build version:** `7.2-dev-dry-run`  
+**Build version:** `7.3-dev-dry-run`  
 **Package:** `com.cherunika.chernika`
 
 ## Implemented
+
+- Stateful ball inventory and motion tracking now runs between the Android vision adapter and planner. It requires a two-frame full-rack baseline, resolves only spatially unambiguous OCR misses, and confirms pocketing only after observed movement into a confident pocket zone plus repeated absence. See `docs/ball-state-tracker.md`.
 
 - Pure-Java decision core in `com.cherunika.chernika.engine`.
 - Explicit HUD parsing for `Hit the X ball` and `Pocket the 9 ball`.
@@ -49,20 +51,22 @@ See `docs/pocket-vision-regression.md` for the fixture construction, measured sc
 
 Verified using JDK 17.0.21, Gradle 9.6.0, Android SDK Platform 35 and Android Build Tools 36.0.0:
 
-- `gradle --no-daemon clean testDebugUnitTest assembleDebug` — **BUILD SUCCESSFUL**.
-- GitHub Actions **Android build and JVM tests** workflow completed successfully on the PR head.
-- **52 JVM tests passed; 0 failures; 0 errors; 0 skipped.**
+- `gradle --no-daemon testDebugUnitTest` — **BUILD SUCCESSFUL** (8m 03s).
+- `gradle --no-daemon assembleDebug` — **BUILD SUCCESSFUL** (1m 28s).
+- **64 JVM tests passed; 0 failures; 0 errors; 0 skipped.**
   - Existing project tests: 29.
   - Instruction-first parser and engine tests: 18.
   - Green-6 edge detector regression tests: 4.
   - Recorded six-pocket refinement regression: 1.
+  - Temporal ball-state tracker tests: 12.
 - APK package inspection confirms:
   - `com.cherunika.chernika`
-  - versionCode `72`
-  - versionName `7.2-dev-dry-run`
+  - versionCode `73`
+  - versionName `7.3-dev-dry-run`
   - minSdk `30`
   - targetSdk `35`
-- Debug APK SHA-256: `4579e3742746aa045825b79461090185c59b36783d25f7c451659caad1becd21`.
+- Debug APK SHA-256: `db98abfc6f7151e213468c3f10517b2a7a985b506bad629f085a4b0e82524428`.
+- APK signature: verified with Android Build Tools 36.0.0 using the Android debug certificate (APK Signature Scheme v2).
 
 No Android device or emulator was attached to the build environment, so this verification is a JVM/build check, not a live Plato gameplay test.
 
@@ -72,8 +76,8 @@ This is not an autonomous-play release.
 
 1. All six pocket anchors pass the 0.72 confidence gate in one static recorded frame (0.913–0.926 in the full-frame probe). Broader validation across other matches, screen sizes, motion and occlusion is still required; otherwise the engine correctly returns WAIT.
 2. Ball-number OCR currently accepts only a single unambiguous digit and assigns a conservative provisional confidence. This confidence has not yet been calibrated on a labelled set of Plato ball crops.
-3. The adapter's inventory-complete flag checks that detected candidates have unique readable numbers. It does **not** prove detector recall. The green 6 is recovered in one rack regression frame, but general recall across lighting, motion, occlusion and screen sizes remains unmeasured.
-4. Stable-frame tracking compares detected ball centers across screenshots. It has not yet been validated against slow residual ball motion.
+3. Temporal inventory now requires a two-frame full-rack baseline and reconciles later detections against remembered identities. This still does **not** prove detector recall: an unseen ball remains unconfirmed and blocks planning, but broader false-negative/false-positive rates have not been measured. The green 6 is recovered in one rack regression frame only.
+4. Motion tracking compares remembered ball centers and visible identities and requires three stable frames. It has not yet been validated against slow residual motion, fast movement between 1.1-second captures, simultaneous collisions or prolonged occlusion.
 5. The planner is geometric and direct-only. It has no measured collision/throw model and does not calculate a calibrated power-bar pull.
 6. Opening-break execution and automatic ball-in-hand placement are not enabled.
 7. No live Plato match or device/emulator gameplay test has been completed.
@@ -85,7 +89,7 @@ The engine must remain dry-run until ball inventory recall, pocket calibration, 
 1. Expand the labelled frame set beyond the single rack and pocket frames, including green 6 and all six pockets under different positions, lighting, overlap and motion.
 2. Measure ball and pocket detection precision/recall and calibrate OCR confidence.
 3. Validate six-pocket refinement on complete table screenshots.
-4. Add motion-settled verification using consecutive frames and post-shot state changes.
+4. Expand temporal tracking tests to simultaneous collisions, occlusion, fast/slow motion and multiple matches.
 5. Validate direct contact and direct pot candidates against recorded aiming guides.
 6. Calibrate the power bar separately; do not infer power from distance alone.
 7. Add supervised, explicitly armed gesture execution only after the above gates pass.
