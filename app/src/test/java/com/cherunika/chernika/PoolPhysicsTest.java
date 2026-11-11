@@ -7,11 +7,11 @@ import static org.junit.Assert.*;
 public class PoolPhysicsTest {
     private TableGeometry table() {
         return PlatoTableCalibration.fromDetectedFeltBounds(
-                100, 100, 611, 1100, 1200, 1600);
+                112, 159, 495, 904, 611, 1024);
     }
 
     private FrameState frameWithCue(Vec2 cuePosition) {
-        FrameState frame = new FrameState(1200, 1600);
+        FrameState frame = new FrameState(611, 1024);
         frame.table = table();
         frame.cueBall = new Ball(cuePosition, frame.table.referenceBallRadius, 0, true);
         frame.balls.add(frame.cueBall);
@@ -74,9 +74,9 @@ public class PoolPhysicsTest {
         TableGeometry table = table();
         Pocket pocket = table.pocket(Pocket.Id.TOP_LEFT);
         Vec2 targetPosition = new Vec2(
-                pocket.center.x + 60, pocket.center.y + 60);
+                pocket.center.x + 28, pocket.center.y + 28);
         FrameState frame = frameWithCue(new Vec2(
-                targetPosition.x + 50, targetPosition.y + 50));
+                targetPosition.x + 35, targetPosition.y + 35));
         Ball target = new Ball(targetPosition, frame.cueBall.radius, 1, false);
         frame.balls.add(target);
 
