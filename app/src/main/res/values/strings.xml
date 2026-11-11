@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Chernika Engine</string>
-    <string name="accessibility_description">Reads the 9-ball table and game announcements, then performs calibrated aiming and power gestures while the engine is enabled.</string>
+    <string name="accessibility_description">Observes the active Plato 9-ball table and performs direct aiming and power gestures only while the engine is activated.</string>
 </resources>

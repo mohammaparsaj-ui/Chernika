@@ -5,12 +5,13 @@ import java.util.Set;
 
 /**
  * Fail-closed instruction-first decision core for Plato 9-ball.
- * This class only proposes a direct shot; it never dispatches taps or drags.
+ * It proposes only direct pots or direct legal-contact shots.
  */
 public final class InstructionFirstEngine {
     private static final double MIN_TABLE_CONFIDENCE = 0.88;
     private static final double MIN_POCKET_CONFIDENCE = 0.72;
     private static final double MIN_BALL_CONFIDENCE = 0.78;
+    private static final double MIN_POWER_CONTROL_CONFIDENCE = 0.80;
     private static final int REQUIRED_STABLE_FRAMES = 3;
 
     private final DirectShotPlanner planner = new DirectShotPlanner();
@@ -68,10 +69,10 @@ public final class InstructionFirstEngine {
         }
 
         String reason = result.kind == EngineDecision.ShotKind.DIRECT_POT
-                ? "Direct pot candidate found. Verify power calibration before any gesture."
-                : "Direct legal first-contact candidate found; no direct pot is authorized in this state.";
+                ? "Direct pot candidate found."
+                : "Direct legal first-contact candidate found; no direct pot is available.";
         return EngineDecision.plan(legalBall, objectiveBall, result.kind,
-                result.aimPoint, result.pocketIndex, reason);
+                result.aimPoint, result.pocketIndex, result.powerPercent, reason);
     }
 
     private String validate(GameObservation observation) {
@@ -79,6 +80,7 @@ public final class InstructionFirstEngine {
         if (observation.replayScreen || !observation.liveTable) {
             return "Screen is not confirmed as a live table; replay and non-game screens are blocked.";
         }
+        if (!observation.yourTurn) return "Waiting for the player's own turn.";
         if (observation.ballsMoving || observation.consecutiveStableFrames < REQUIRED_STABLE_FRAMES) {
             return "Waiting for the table to stop moving and remain stable for three frames.";
         }
@@ -93,6 +95,9 @@ public final class InstructionFirstEngine {
             if (pocket == null || pocket.confidence < MIN_POCKET_CONFIDENCE) {
                 return "At least one pocket is not confidently localized.";
             }
+        }
+        if (observation.powerControlConfidence < MIN_POWER_CONTROL_CONFIDENCE) {
+            return "The vertical power slider is not confidently detected.";
         }
         if (!observation.inventoryComplete) {
             return "Ball inventory is incomplete; unknown or missed balls could obstruct the shot.";

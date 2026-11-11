@@ -2,14 +2,17 @@ package com.cherunika.chernika;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
+import android.graphics.Path;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.cherunika.chernika.engine.BallObservation;
 import com.cherunika.chernika.engine.BallStateTracker;
@@ -24,7 +27,6 @@ import com.cherunika.chernika.engine.Rect2;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
@@ -38,29 +40,53 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Screenshot/OCR adapter for the instruction-first engine.
+ * Engine-only Plato adapter.
  *
- * This development build is intentionally DRY-RUN ONLY. It reports legal
- * direct-shot candidates but does not dispatch taps, drags, spin or power input.
+ * Gesture execution is gated by: explicit activation, Plato foreground package,
+ * OCR-confirmed own turn, live HUD instruction, stable table, complete ball
+ * inventory, six confident pockets, and a detected vertical power slider.
  */
 public class ChernikaAccessibilityService extends AccessibilityService {
+    private static final long CAPTURE_INTERVAL_MS = 1100;
+    private static final long GESTURE_RETRY_COOLDOWN_MS = 4500;
+    private static final long NO_MOTION_REARM_MS = 8000;
+    private static final double MIN_POWER_PERCENT = 26.5;
+    private static final double MAX_POWER_PERCENT = 62.4;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final AtomicBoolean captureBusy = new AtomicBoolean(false);
     private final VisionAnalyzer vision = new VisionAnalyzer();
     private final HudInstructionParser hudParser = new HudInstructionParser();
     private final InstructionFirstEngine engine = new InstructionFirstEngine();
+    private final BallStateTracker ballStateTracker = new BallStateTracker();
 
     private TextRecognizer recognizer;
     private long lastCaptureRequestAt;
+    private long lastGestureAttemptAt;
+    private long lastShotAt;
     private boolean loopStarted;
+    private String foregroundPackage = "";
     private int stableFrames;
-    private final BallStateTracker ballStateTracker = new BallStateTracker();
+    private int candidatePlanFrames;
+    private int yourTurnFalseFrames;
+    private String candidatePlanKey = "";
     private String trackingStatus = "Waiting for a full rack baseline.";
+    private String lastShotInstructionKey = "";
+    private int lastShotLegalBall;
+    private boolean awaitingShotResolution;
+    private boolean motionObservedSinceShot;
+    private boolean lastTurnWasOurs;
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
-            if (isEngineEnabled()) captureFrame();
-            handler.postDelayed(this, 1100);
+            if (isEngineEnabled()) {
+                if (isPlatoForeground()) {
+                    captureFrame();
+                } else {
+                    setStatus("Activated · waiting for Plato 9-ball.");
+                }
+            }
+            handler.postDelayed(this, CAPTURE_INTERVAL_MS);
         }
     };
 
@@ -79,15 +105,22 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             loopStarted = true;
             handler.post(loop);
         }
-        setStatus("Instruction-first engine connected in DRY-RUN mode. No touch gestures will be sent.");
+        setStatus("Accessibility ready · waiting for activation.");
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (isEngineEnabled() && !captureBusy.get()) captureFrame();
+        if (event != null && event.getPackageName() != null) {
+            String eventPackage = event.getPackageName().toString();
+            if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    || isPlatoPackage(eventPackage)) {
+                foregroundPackage = eventPackage;
+            }
+        }
+        if (isEngineEnabled() && isPlatoForeground() && !captureBusy.get()) captureFrame();
     }
 
     @Override public void onInterrupt() {
-        setStatus("Accessibility interrupted. No game gestures are active.");
+        setStatus("Accessibility interrupted · automation paused.");
     }
 
     @Override public void onDestroy() {
@@ -102,7 +135,29 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                 .getBoolean("engine_enabled", false);
     }
 
+    private boolean isPlatoPackage(String packageName) {
+        return packageName != null
+                && packageName.toLowerCase(Locale.ROOT).contains("plato");
+    }
+
+    private boolean isPlatoForeground() {
+        AccessibilityNodeInfo root = null;
+        try {
+            root = getRootInActiveWindow();
+            if (root != null && root.getPackageName() != null) {
+                foregroundPackage = root.getPackageName().toString();
+                return isPlatoPackage(foregroundPackage);
+            }
+        } catch (Throwable ignored) {
+            // Fall back to the most recent window-state package event.
+        } finally {
+            if (root != null) root.recycle();
+        }
+        return isPlatoPackage(foregroundPackage);
+    }
+
     private void captureFrame() {
+        if (!isEngineEnabled() || !isPlatoForeground()) return;
         long now = System.currentTimeMillis();
         if (now - lastCaptureRequestAt < 1000) return;
         if (Build.VERSION.SDK_INT < 30 || recognizer == null
@@ -147,7 +202,7 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private void processFrame(Bitmap bitmap) {
         recognizer.process(InputImage.fromBitmap(bitmap, 0))
                 .addOnSuccessListener(text -> {
-                    if (!isEngineEnabled()) {
+                    if (!isEngineEnabled() || !isPlatoForeground()) {
                         finishCapture(bitmap);
                         return;
                     }
@@ -161,7 +216,9 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                         return;
                     }
                     readBallNumbers(bitmap, frame, () -> {
-                        if (isEngineEnabled()) evaluateAndReport(frame, visibleText);
+                        if (isEngineEnabled() && isPlatoForeground()) {
+                            evaluateAndReport(frame, visibleText);
+                        }
                         finishCapture(bitmap);
                     });
                 })
@@ -221,8 +278,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     if (!matcher.find()) return new NumberRead(0, 0.0);
                     int number = Integer.parseInt(matcher.group(1));
                     if (matcher.find()) return new NumberRead(0, 0.0);
-                    // OCR confidence is intentionally conservative until it is
-                    // calibrated against a labelled set of Plato ball crops.
+                    // Provisional OCR confidence remains deliberately below
+                    // the status of a measured/calibrated classifier.
                     return new NumberRead(number, 0.84);
                 } finally {
                     if (!enlarged.isRecycled()) enlarged.recycle();
@@ -235,21 +292,93 @@ public class ChernikaAccessibilityService extends AccessibilityService {
 
     private void evaluateAndReport(FrameState frame, String visibleText) {
         GameObservation observation = toObservation(frame, visibleText);
-        EngineDecision decision = engine.evaluate(observation);
-        if (decision.status == EngineDecision.Status.WAIT) {
-            setStatus("DRY RUN · WAIT\n" + decision.reason
-                    + "\nTracking: " + trackingStatus
-                    + "\nStable frames: " + stableFrames
-                    + " · refined pockets: " + frame.refinedPocketCount + "/6"
-                    + "\nNo touch gestures are sent by this build.");
+
+        if (!observation.yourTurn) {
+            candidatePlanFrames = 0;
+            candidatePlanKey = "";
+            yourTurnFalseFrames++;
+            if (yourTurnFalseFrames >= 2 && lastTurnWasOurs) {
+                awaitingShotResolution = false;
+                motionObservedSinceShot = false;
+                lastTurnWasOurs = false;
+            }
+            setStatus("Plato detected · waiting for your turn."
+                    + "\nTracking: " + trackingStatus);
             return;
         }
 
-        setStatus(String.format(Locale.US,
-                "DRY RUN · candidate only\nLegal first contact: ball %d\nRoute: %s\nAim point: %.1f, %.1f\n"
-                        + "Spin: center only · stable frames: %d\nNo touch gestures are sent; power calibration is not yet authorized.",
-                decision.legalBall, decision.shotKind, decision.aimPoint.x,
-                decision.aimPoint.y, stableFrames));
+        yourTurnFalseFrames = 0;
+        if (!lastTurnWasOurs) {
+            awaitingShotResolution = false;
+            motionObservedSinceShot = false;
+            candidatePlanFrames = 0;
+            candidatePlanKey = "";
+        }
+        lastTurnWasOurs = true;
+
+        if (awaitingShotResolution && observation.ballsMoving) {
+            motionObservedSinceShot = true;
+        }
+
+        EngineDecision decision = engine.evaluate(observation);
+        long now = System.currentTimeMillis();
+
+        if (awaitingShotResolution) {
+            if (decision.isPlanReady() && decision.legalBall != lastShotLegalBall) {
+                awaitingShotResolution = false;
+            } else if (motionObservedSinceShot && !observation.ballsMoving
+                    && observation.consecutiveStableFrames >= 3) {
+                awaitingShotResolution = false;
+            } else if (!motionObservedSinceShot && now - lastShotAt >= NO_MOTION_REARM_MS) {
+                awaitingShotResolution = false;
+            }
+        }
+
+        if (decision.status == EngineDecision.Status.WAIT) {
+            candidatePlanFrames = 0;
+            candidatePlanKey = "";
+            if (awaitingShotResolution) {
+                setStatus("Shot sent · waiting for balls to stop and the next legal state."
+                        + "\nTracking: " + trackingStatus);
+            } else {
+                setStatus("WAIT · " + decision.reason
+                        + "\nTracking: " + trackingStatus
+                        + "\nStable frames: " + stableFrames
+                        + " · pockets refined: " + frame.refinedPocketCount + "/6");
+            }
+            return;
+        }
+
+        if (awaitingShotResolution) {
+            setStatus("Shot sent · waiting for the result before selecting another shot.");
+            return;
+        }
+
+        String planKey = String.format(Locale.US, "%d:%s:%d:%d:%.0f",
+                decision.legalBall, decision.shotKind,
+                Math.round(decision.aimPoint.x / 12.0),
+                Math.round(decision.aimPoint.y / 12.0),
+                decision.powerPercent);
+        if (planKey.equals(candidatePlanKey)) {
+            candidatePlanFrames++;
+        } else {
+            candidatePlanKey = planKey;
+            candidatePlanFrames = 1;
+        }
+
+        if (candidatePlanFrames < 2) {
+            setStatus(String.format(Locale.US,
+                    "Ready · direct %s on ball %d · power %.1f%% · confirming (%d/2).",
+                    decision.shotKind, decision.legalBall, decision.powerPercent,
+                    candidatePlanFrames));
+            return;
+        }
+
+        if (now - lastGestureAttemptAt < GESTURE_RETRY_COOLDOWN_MS) {
+            setStatus("Ready · waiting for the gesture cooldown.");
+            return;
+        }
+        executePlan(frame, decision, observation);
     }
 
     private GameObservation toObservation(FrameState frame, String visibleText) {
@@ -283,7 +412,7 @@ public class ChernikaAccessibilityService extends AccessibilityService {
 
         HudInstruction instruction = hudParser.parse(visibleText);
         boolean replay = isReplayOrResultsScreen(visibleText);
-        if (replay) ballStateTracker.reset();
+        if (replay || !frame.hasUsableTable()) ballStateTracker.reset();
         BallStateTracker.Result tracked = ballStateTracker.update(
                 replay ? Collections.emptyList() : rawBalls, pockets);
         List<BallObservation> balls = tracked.balls;
@@ -293,12 +422,20 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         boolean live = !replay && (instruction.type == HudInstruction.Type.HIT_BALL
                 || instruction.type == HudInstruction.Type.POCKET_BALL
                 || instruction.type == HudInstruction.Type.BALL_IN_HAND);
-        boolean inventoryComplete = tracked.inventoryComplete;
-        double powerConfidence = frame.powerBar == null ? 0.0 : 0.80;
+        boolean yourTurn = isUsersTurn(visibleText);
+        double powerConfidence = frame.powerBar == null ? 0.0 : frame.powerBar.confidence;
 
         return new GameObservation(bounds, tableConfidence, pockets, balls, instruction,
-                inventoryComplete, live, replay, tracked.ballsMoving,
-                tracked.consecutiveStableFrames, powerConfidence);
+                tracked.inventoryComplete, live, replay, tracked.ballsMoving,
+                tracked.consecutiveStableFrames, powerConfidence, yourTurn);
+    }
+
+    private boolean isUsersTurn(String text) {
+        String normalized = text == null ? "" : text.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9']+", " ").replaceAll("\\s+", " ").trim();
+        return normalized.contains("your turn")
+                || normalized.contains("chernika's turn")
+                || normalized.contains("chernika s turn");
     }
 
     private boolean isReplayOrResultsScreen(String text) {
@@ -306,6 +443,99 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         return normalized.contains("best shot") || normalized.contains("game over")
                 || normalized.contains("match over") || normalized.contains("play again")
                 || normalized.contains("watch replay") || normalized.contains("replay");
+    }
+
+    private void executePlan(FrameState frame, EngineDecision decision,
+                             GameObservation observation) {
+        if (!isEngineEnabled() || !isPlatoForeground()
+                || !decision.gestureExecutionEnabled || frame.cueBall == null
+                || frame.powerBar == null) return;
+
+        double powerPercent = decision.powerPercent;
+        if (powerPercent < MIN_POWER_PERCENT || powerPercent > MAX_POWER_PERCENT) {
+            setStatus("WAIT · proposed power is outside the recorded safe interval.");
+            return;
+        }
+
+        Vec2 cue = frame.cueBall.center;
+        Vec2 aim = new Vec2(decision.aimPoint.x, decision.aimPoint.y);
+        double aimDistance = cue.distance(aim);
+        if (aimDistance < Math.max(24.0, frame.cueBall.radius * 1.7)) {
+            setStatus("WAIT · aim displacement is too small to execute safely.");
+            return;
+        }
+
+        lastGestureAttemptAt = System.currentTimeMillis();
+        setStatus(String.format(Locale.US,
+                "Executing direct shot · legal ball %d · %s · %.1f%% power.",
+                decision.legalBall, decision.shotKind, powerPercent));
+
+        dispatchDrag(cue, aim, 360, aimAccepted -> {
+            if (!aimAccepted || !isEngineEnabled() || !isPlatoForeground()) {
+                candidatePlanFrames = 0;
+                setStatus("Aim gesture was not accepted · engine remains armed.");
+                return;
+            }
+
+            handler.postDelayed(() -> {
+                if (!isEngineEnabled() || !isPlatoForeground()) return;
+                PowerBar bar = frame.powerBar;
+                float targetY = bar.yForPower((float) powerPercent);
+                if (targetY <= bar.top + 1.0f || targetY >= bar.bottom - 1.0f) {
+                    candidatePlanFrames = 0;
+                    setStatus("Power target is outside the detected slider.");
+                    return;
+                }
+                Vec2 powerStart = new Vec2(bar.centerX, bar.top);
+                Vec2 powerEnd = new Vec2(bar.centerX, targetY);
+                dispatchDrag(powerStart, powerEnd, 320, powerAccepted -> {
+                    if (powerAccepted && isEngineEnabled()) {
+                        awaitingShotResolution = true;
+                        motionObservedSinceShot = false;
+                        lastShotAt = System.currentTimeMillis();
+                        lastShotLegalBall = decision.legalBall;
+                        lastShotInstructionKey = observation.instruction.type + ":"
+                                + observation.instruction.ballNumber;
+                        candidatePlanFrames = 0;
+                        candidatePlanKey = "";
+                        setStatus(String.format(Locale.US,
+                                "Shot sent · ball %d · %.1f%% slider power · waiting for result.",
+                                decision.legalBall, powerPercent));
+                    } else {
+                        candidatePlanFrames = 0;
+                        setStatus("Power gesture failed · no shot was confirmed.");
+                    }
+                });
+            }, 180);
+        });
+    }
+
+    private void dispatchDrag(Vec2 from, Vec2 to, long durationMs,
+                              GestureResult callback) {
+        if (!isEngineEnabled() || !isPlatoForeground()
+                || from == null || to == null || from.distance(to) < 2.0) {
+            callback.complete(false);
+            return;
+        }
+        Path path = new Path();
+        path.moveTo((float) from.x, (float) from.y);
+        path.lineTo((float) to.x, (float) to.y);
+        GestureDescription gesture = new GestureDescription.Builder()
+                .addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs))
+                .build();
+        boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
+            @Override public void onCompleted(GestureDescription description) {
+                callback.complete(true);
+            }
+            @Override public void onCancelled(GestureDescription description) {
+                callback.complete(false);
+            }
+        }, handler);
+        if (!accepted) callback.complete(false);
+    }
+
+    private interface GestureResult {
+        void complete(boolean success);
     }
 
     private void finishCapture(Bitmap bitmap) {
@@ -325,6 +555,20 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         NumberRead(int number, double confidence) {
             this.number = number;
             this.confidence = confidence;
+        }
+    }
+
+    private static final class Vec2 {
+        final double x;
+        final double y;
+
+        Vec2(double x, double y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        double distance(Vec2 other) {
+            return Math.hypot(x - other.x, y - other.y);
         }
     }
 }
