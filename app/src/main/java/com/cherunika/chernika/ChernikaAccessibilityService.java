@@ -558,17 +558,4 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         }
     }
 
-    private static final class Vec2 {
-        final double x;
-        final double y;
-
-        Vec2(double x, double y) {
-            this.x = x;
-            this.y = y;
-        }
-
-        double distance(Vec2 other) {
-            return Math.hypot(x - other.x, y - other.y);
-        }
-    }
 }
