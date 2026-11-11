@@ -74,7 +74,7 @@ public class InstructionFirstEngineTest {
 
         EngineDecision decision = engine.evaluate(state);
         assertEquals(EngineDecision.Status.WAIT, decision.status);
-        assertTrue(decision.reason.contains("disagrees"));
+        assertTrue(decision.reason.contains("lower-numbered ball 2"));
     }
 
     @Test public void pocketNineWithLowerBallRequiresLegalContactOnLowestBall() {
@@ -103,16 +103,16 @@ public class InstructionFirstEngineTest {
         assertEquals(EngineDecision.ShotKind.DIRECT_POT, decision.shotKind);
     }
 
-    @Test public void unknownNumberBlocksAllShots() {
+    @Test public void unreadBallAwayFromRouteRemainsAnObstacleWithoutBlockingHudTarget() {
         GameObservation state = observation(
                 new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
-                true, true, false, false, 3,
+                false, true, false, false, 3,
                 cue(240, 250), ball(4, 500, 250),
                 new BallObservation(new Point2(650, 300), 10, 0, false, 0.92));
 
         EngineDecision decision = engine.evaluate(state);
-        assertEquals(EngineDecision.Status.WAIT, decision.status);
-        assertTrue(decision.reason.contains("no reliable number"));
+        assertEquals(EngineDecision.Status.PLAN_READY, decision.status);
+        assertEquals(4, decision.legalBall);
     }
 
     @Test public void replayScreenNeverProducesPlan() {
@@ -178,14 +178,26 @@ public class InstructionFirstEngineTest {
         assertTrue(decision.reason.contains("pocket"));
     }
 
-    @Test public void incompleteInventoryBlocksPlanning() {
+    @Test public void partialInventoryDoesNotBlockAConfidentHudTarget() {
         GameObservation state = observation(
                 new HudInstruction(HudInstruction.Type.HIT_BALL, 4, "Hit the 4 ball"),
                 false, true, false, false, 3,
                 cue(240, 250), ball(4, 500, 250));
 
         EngineDecision decision = engine.evaluate(state);
+        assertEquals(EngineDecision.Status.PLAN_READY, decision.status);
+        assertEquals(4, decision.legalBall);
+    }
+
+    @Test public void unreadObjectBallBlocksFinalNineWhenNoLegalFirstContactIsKnown() {
+        GameObservation state = observation(
+                new HudInstruction(HudInstruction.Type.POCKET_BALL, 9, "Pocket the 9 ball"),
+                false, true, false, false, 3,
+                cue(240, 250), ball(9, 520, 250),
+                new BallObservation(new Point2(700, 300), 10, 0, false, 0.92));
+
+        EngineDecision decision = engine.evaluate(state);
         assertEquals(EngineDecision.Status.WAIT, decision.status);
-        assertTrue(decision.reason.contains("incomplete"));
+        assertTrue(decision.reason.contains("unread object ball"));
     }
 }
