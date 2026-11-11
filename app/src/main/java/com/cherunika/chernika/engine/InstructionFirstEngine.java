@@ -36,6 +36,7 @@ public final class InstructionFirstEngine {
         BallObservation cue = null;
         BallObservation[] byNumber = new BallObservation[10];
         Set<Integer> visibleNumbers = new HashSet<>();
+        boolean hasUnknownObjectBall = false;
         for (BallObservation ball : observation.balls) {
             if (ball.cueBall) {
                 cue = ball;
@@ -43,6 +44,8 @@ public final class InstructionFirstEngine {
                     && ball.identityConfidence >= MIN_IDENTITY_CONFIDENCE) {
                 byNumber[ball.number] = ball;
                 visibleNumbers.add(ball.number);
+            } else {
+                hasUnknownObjectBall = true;
             }
         }
         if (cue == null) return EngineDecision.waitFor("Cue ball is not confidently visible.");
@@ -66,13 +69,19 @@ public final class InstructionFirstEngine {
             if (objectiveBall != 9) {
                 return EngineDecision.waitFor("v1 only recognizes the confirmed 9-ball pocket objective.");
             }
-            for (int number : visibleNumbers) {
-                if (number < 9) {
-                    return EngineDecision.waitFor("HUD says pocket the 9, but ball "
-                            + number + " is still visible.");
+            int lowestKnown = 9;
+            for (int number : visibleNumbers) lowestKnown = Math.min(lowestKnown, number);
+            if (lowestKnown < 9) {
+                // A 9-ball combination is not a licence to hit the 9 first:
+                // contact the lowest visible ball and leave trick routes disabled.
+                legalBall = lowestKnown;
+            } else {
+                if (hasUnknownObjectBall) {
+                    return EngineDecision.waitFor(
+                            "HUD requests the 9, but an unread object ball could be the legal first-contact ball.");
                 }
+                legalBall = 9;
             }
-            legalBall = 9;
         }
 
         BallObservation target = byNumber[legalBall];
