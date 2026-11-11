@@ -17,10 +17,14 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Consumer;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,6 +44,9 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private long lastCaptureRequestAt = 0;
     private String lastShotSignature = "";
     private boolean loopStarted = false;
+    private boolean shotInFlight = false;
+    private int stableFrameCount = 0;
+    private final Map<Integer, Vec2> previousBallPositions = new HashMap<>();
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
@@ -129,31 +136,157 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     }
 
     private void processFrame(Bitmap bitmap) {
-        recognizer.process(InputImage.fromBitmap(bitmap, 0))
-                .addOnSuccessListener(text -> {
-                    if (!isEngineEnabled()) {
-                        finishCapture(bitmap);
-                        return;
-                    }
-                    String visibleText = text == null ? "" : text.getText();
-                    TargetAnnouncement announcement = parser.parse(visibleText);
-                    if (!announcement.playerTurn) {
-                        setStatus("Waiting for your turn in Plato. Engine is monitoring safely.");
-                        finishCapture(bitmap);
-                        return;
-                    }
-                    FrameState frame = vision.analyze(bitmap);
-                    setStatus(buildStatus(frame, announcement));
-                    if (!frame.hasUsableTable() || frame.balls.isEmpty()) {
-                        finishCapture(bitmap);
-                        return;
-                    }
-                    readBallNumbers(bitmap, frame, announcement, () -> finishCapture(bitmap));
-                })
-                .addOnFailureListener(e -> {
-                    setStatus("OCR error: " + e.getClass().getSimpleName());
-                    finishCapture(bitmap);
-                });
+        if (!isEngineEnabled()) {
+            finishCapture(bitmap);
+            return;
+        }
+
+        // The calibrated table is the primary game-screen signal. Do not
+        // make table recognition depend on OCR reading a turn badge first.
+        FrameState frame = vision.analyze(bitmap);
+        if (!frame.hasUsableTable()) {
+            stableFrameCount = 0;
+            previousBallPositions.clear();
+            setStatus("Screen capture active · waiting for the calibrated Plato table.");
+            finishCapture(bitmap);
+            return;
+        }
+
+        if (frame.balls.isEmpty() || frame.cueBall == null) {
+            readHudAnnouncement(bitmap, announcement -> {
+                if (announcement.playerTurn) {
+                    setStatus("Plato table locked · your turn detected · waiting for cue/ball detection.");
+                } else if (announcement.hasTarget()) {
+                    setStatus("Plato table locked · HUD target #" + announcement.legalBall
+                            + " read · waiting for the local Your Turn badge.");
+                } else {
+                    setStatus("Plato table locked · waiting for the cue ball and target HUD.");
+                }
+                finishCapture(bitmap);
+            });
+            return;
+        }
+
+        boolean settled = updateMotionState(frame);
+        if (shotInFlight && settled) {
+            shotInFlight = false;
+            setStatus("Shot settled · re-reading the table and next target.");
+        }
+        if (shotInFlight || !settled) {
+            setStatus("Plato table locked · tracking ball motion before planning the next shot.");
+            finishCapture(bitmap);
+            return;
+        }
+
+        readHudAnnouncement(bitmap, announcement -> {
+            if (!isEngineEnabled()) {
+                finishCapture(bitmap);
+                return;
+            }
+            if (!announcement.playerTurn) {
+                if (announcement.hasTarget()) {
+                    setStatus("Plato table locked · target #" + announcement.legalBall
+                            + " detected · waiting for the local Your Turn badge.");
+                } else {
+                    setStatus("Plato table locked · balls settled · waiting for your turn.");
+                }
+                finishCapture(bitmap);
+                return;
+            }
+            setStatus(buildStatus(frame, announcement));
+            if (frame.balls.isEmpty() || frame.cueBall == null) {
+                setStatus("Your turn detected · waiting for a reliable cue-ball and object-ball lock.");
+                finishCapture(bitmap);
+                return;
+            }
+            readBallNumbers(bitmap, frame, announcement, () -> finishCapture(bitmap));
+        });
+    }
+
+    private void readHudAnnouncement(Bitmap source, Consumer<TargetAnnouncement> callback) {
+        if (recognizer == null || source == null) {
+            callback.accept(parser.parse(""));
+            return;
+        }
+        // These normalized ROIs match the actual Plato HUD in the supplied
+        // 720x1216 replay: local turn badge, target instruction and event banner.
+        Bitmap turnCrop = cropScaled(source, 0.55, 0.045, 0.82, 0.12, 3);
+        Bitmap targetCrop = cropScaled(source, 0.86, 0.135, 0.995, 0.235, 3);
+        Bitmap bannerCrop = cropScaled(source, 0.16, 0.115, 0.82, 0.18, 2);
+
+        Task<Text> turnTask = recognizer.process(InputImage.fromBitmap(turnCrop, 0));
+        Task<Text> targetTask = recognizer.process(InputImage.fromBitmap(targetCrop, 0));
+        Task<Text> bannerTask = recognizer.process(InputImage.fromBitmap(bannerCrop, 0));
+        Tasks.whenAllComplete(turnTask, targetTask, bannerTask).addOnSuccessListener(done -> {
+            String combined = safeText(turnTask) + " | "
+                    + safeText(targetTask) + " | " + safeText(bannerTask);
+            TargetAnnouncement announcement = parser.parse(combined);
+            turnCrop.recycle();
+            targetCrop.recycle();
+            bannerCrop.recycle();
+            callback.accept(announcement);
+        }).addOnFailureListener(error -> {
+            turnCrop.recycle();
+            targetCrop.recycle();
+            bannerCrop.recycle();
+            setStatus("HUD recognition failed · keeping the engine in monitor mode.");
+            callback.accept(parser.parse(""));
+        });
+    }
+
+    private Bitmap cropScaled(Bitmap source, double leftFraction, double topFraction,
+                              double rightFraction, double bottomFraction, int scale) {
+        int left = Math.max(0, Math.min(source.getWidth() - 1,
+                (int) Math.floor(source.getWidth() * leftFraction)));
+        int top = Math.max(0, Math.min(source.getHeight() - 1,
+                (int) Math.floor(source.getHeight() * topFraction)));
+        int right = Math.max(left + 1, Math.min(source.getWidth(),
+                (int) Math.ceil(source.getWidth() * rightFraction)));
+        int bottom = Math.max(top + 1, Math.min(source.getHeight(),
+                (int) Math.ceil(source.getHeight() * bottomFraction)));
+        Bitmap crop = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
+        Bitmap enlarged = Bitmap.createScaledBitmap(
+                crop, crop.getWidth() * scale, crop.getHeight() * scale, true);
+        if (crop != enlarged) crop.recycle();
+        return enlarged;
+    }
+
+    private String safeText(Task<Text> task) {
+        return task != null && task.isSuccessful() && task.getResult() != null
+                ? task.getResult().getText() : "";
+    }
+
+    private boolean updateMotionState(FrameState frame) {
+        Map<Integer, Vec2> current = new HashMap<>();
+        for (Ball ball : frame.balls) {
+            int key = ball.cue ? 0 : ball.number;
+            if (key == 0 && !ball.cue) continue;
+            if (current.containsKey(key)) {
+                stableFrameCount = 0;
+                previousBallPositions.clear();
+                return false;
+            }
+            current.put(key, ball.center);
+        }
+        if (current.isEmpty()) {
+            stableFrameCount = 0;
+            previousBallPositions.clear();
+            return false;
+        }
+        boolean same = current.size() == previousBallPositions.size();
+        if (same) {
+            for (Map.Entry<Integer, Vec2> entry : current.entrySet()) {
+                Vec2 previous = previousBallPositions.get(entry.getKey());
+                if (previous == null || previous.distance(entry.getValue()) > 3.0) {
+                    same = false;
+                    break;
+                }
+            }
+        }
+        stableFrameCount = same ? stableFrameCount + 1 : 0;
+        previousBallPositions.clear();
+        previousBallPositions.putAll(current);
+        return stableFrameCount >= 2;
     }
 
     private void finishCapture(Bitmap bitmap) {
@@ -164,7 +297,11 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private void readBallNumbers(Bitmap bitmap, FrameState frame,
                                  TargetAnnouncement announcement, Runnable finished) {
         List<Ball> candidates = new ArrayList<>();
-        for (Ball ball : frame.balls) if (!ball.cue) candidates.add(ball);
+        for (Ball ball : frame.balls) {
+            if (!ball.cue && (ball.number == 0 || ball.numberConfidence < 0.62)) {
+                candidates.add(ball);
+            }
+        }
         if (candidates.size() > 12) candidates = candidates.subList(0, 12);
         List<Task<Integer>> tasks = new ArrayList<>();
         for (Ball ball : candidates) tasks.add(readBallNumber(bitmap, ball));
@@ -315,12 +452,15 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     if (fired) {
                         lastShotSignature = signature;
                         lastShotAt = System.currentTimeMillis();
-                        setStatus("Shot input sent. Continuous table monitoring remains active.");
+                        shotInFlight = true;
+                        stableFrameCount = 0;
+                        previousBallPositions.clear();
+                        setStatus("Shot input sent · tracking the table until all balls stop.");
                     } else {
                         setStatus("Power input failed. Monitoring without repeating the same shot.");
                     }
                 });
-            }, 260);
+            }, 520);
         });
     }
 
