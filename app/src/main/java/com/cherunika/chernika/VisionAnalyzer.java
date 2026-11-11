@@ -217,6 +217,39 @@ final class VisionAnalyzer {
             }
         }
 
+        // The colour mask above is efficient for most balls, but it can
+        // completely miss the green 6 because its paint is close to the cloth.
+        // Add candidates from the independent radial-edge detector and merge
+        // them with colour candidates before inventory/OCR validation.
+        List<BallEdgeDetector.Candidate> edgeCandidates = BallEdgeDetector.detect(
+                pixels, w, h, left, top, right, bottom, sx, sy,
+                frame.table.referenceBallRadius, 12);
+        for (BallEdgeDetector.Candidate candidate : edgeCandidates) {
+            Vec2 center = new Vec2(candidate.x, candidate.y);
+            boolean duplicate = false;
+            for (Ball existing : frame.balls) {
+                double mergeDistance = Math.max(existing.radius, candidate.radius) * 1.20;
+                if (existing.center.distance(center) < mergeDistance) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate || frame.balls.size() >= 20
+                    || !frame.table.contains(center, candidate.radius * 0.35)) {
+                continue;
+            }
+
+            int averageColor = Color.rgb(
+                    candidate.meanRed, candidate.meanGreen, candidate.meanBlue);
+            float[] averageHsv = new float[3];
+            Color.colorToHSV(averageColor, averageHsv);
+            boolean cue = averageHsv[1] < 0.28f && averageHsv[2] > 0.60f;
+            Ball ball = new Ball(center, candidate.radius, 0, cue, candidate.score);
+            frame.balls.add(ball);
+            observedRadii.add(candidate.radius);
+            if (cue && frame.cueBall == null) frame.cueBall = ball;
+        }
+
         BallRadiusEstimator.Estimate estimate = BallRadiusEstimator.estimate(
                 observedRadii, frame.table.referenceBallRadius,
                 frame.table.referenceBallRadiusUncertainty);
