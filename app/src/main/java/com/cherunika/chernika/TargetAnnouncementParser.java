@@ -5,8 +5,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class TargetAnnouncementParser {
-    private static final Pattern HIT = Pattern.compile("\\bhit\\s+(?:the\\s+)?([1-9])\\s+ball\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern POCKET = Pattern.compile("\\bpocket\\s+(?:the\\s+)?([1-9])\\s+ball\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern HIT = Pattern.compile(
+            "\\bhit\\s+(?:the\\s+)?([1-9])(?:\\s*[-–]\\s*|\\s+)ball\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern POCKET = Pattern.compile(
+            "\\bpocket\\s+(?:the\\s+)?([1-9])(?:\\s*[-–]\\s*|\\s+)ball\\b",
+            Pattern.CASE_INSENSITIVE);
 
     TargetAnnouncement parse(String text) {
         String normalized = text == null ? "" : text.toLowerCase(Locale.ROOT)

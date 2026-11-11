@@ -199,9 +199,17 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             }
 
             if (plan == null) {
-                setStatus(announcement.hasTarget()
-                        ? "HUD target read; waiting for that ball and a clear pocket route."
-                        : "Waiting for a verified diamond rack or a confident lowest-ball color read.");
+                if (announcement.breakTurn || rack.detected) {
+                    setStatus(!rack.detected
+                            ? "Break instruction read; waiting for a complete verified nine-ball rack."
+                            : (frame.cueBall == null
+                                ? "Nine-ball rack verified; waiting for the cue ball."
+                                : "Nine-ball rack verified; waiting for safe break input conditions."));
+                } else {
+                    setStatus(announcement.hasTarget()
+                            ? "HUD target read; waiting for that ball and a clear pocket route."
+                            : "Waiting for a verified diamond rack or a confident lowest-ball color read.");
+                }
                 finished.run();
                 return;
             }

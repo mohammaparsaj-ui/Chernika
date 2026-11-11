@@ -19,6 +19,13 @@ public class TargetAnnouncementParserTest {
         assertEquals(1, result.legalBall);
     }
 
+    @Test public void parsesHyphenatedHudBallNames() {
+        TargetAnnouncement result = new TargetAnnouncementParser()
+                .parse("Hit the 1-ball | Pocket the 9-ball");
+        assertEquals(1, result.legalBall);
+        assertEquals(9, result.objectiveBall);
+    }
+
     @Test public void recognizesBallInHand() {
         TargetAnnouncement result = new TargetAnnouncementParser().parse("Scratch - Ball in hand");
         assertTrue(result.scratch);
