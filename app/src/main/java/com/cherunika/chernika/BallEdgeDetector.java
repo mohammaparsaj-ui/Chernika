@@ -171,8 +171,8 @@ final class BallEdgeDetector {
             if (validAngles < ANGLE_COUNT * 0.80) continue;
             double meanContrast = totalContrast / validAngles;
             double support = supportedAngles / (double) validAngles;
-            double score = 0.58 + 0.22 * Math.min(1.0, meanContrast / 32.0)
-                    + 0.20 * support;
+            double score = 0.55 + 0.35 * Math.min(1.0, meanContrast / 80.0)
+                    + 0.10 * support;
             if (best == null || score > best.score) {
                 best = new EdgeMeasure(radius, meanContrast, support, score);
             }
