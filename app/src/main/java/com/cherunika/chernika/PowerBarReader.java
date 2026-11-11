@@ -72,8 +72,48 @@ final class PowerBarReader {
         }
         if (bottom - top < height * 0.25) return null;
 
+        float[] handle = findVerticalHandle(bitmap, bestStart, bestEnd, top, bottom);
+        float fraction = handle == null ? 0.0f
+                : (float) Math.max(0.0, Math.min(1.0,
+                    (bottom - handle[1]) / (double) Math.max(1, bottom - top)));
         return new PowerBar(bestStart, bestEnd, top, bottom,
-                0.5f, PowerBar.Orientation.VERTICAL);
+                fraction, PowerBar.Orientation.VERTICAL,
+                handle == null ? Float.NaN : handle[0],
+                handle == null ? Float.NaN : handle[1]);
+    }
+
+    /**
+     * The meter remains visible while idle. Its actual drag origin is the
+     * short white thumb, not the bottom edge of the colored meter.
+     */
+    private float[] findVerticalHandle(Bitmap bitmap, int left, int right,
+                                       int top, int bottom) {
+        float[] hsv = new float[3];
+        int bestX = -1, bestStart = -1, bestLength = 0;
+        for (int x = left + 2; x < right - 2; x++) {
+            int runStart = -1;
+            for (int y = top + 5; y < bottom - 5; y++) {
+                Color.colorToHSV(bitmap.getPixel(x, y), hsv);
+                boolean whiteThumb = hsv[1] < 0.22f && hsv[2] > 0.72f;
+                if (whiteThumb) {
+                    if (runStart < 0) runStart = y;
+                } else if (runStart >= 0) {
+                    int length = y - runStart;
+                    if (length >= 5 && length <= 14 && length > bestLength) {
+                        bestLength = length; bestX = x; bestStart = runStart;
+                    }
+                    runStart = -1;
+                }
+            }
+            if (runStart >= 0) {
+                int length = bottom - 5 - runStart;
+                if (length >= 5 && length <= 14 && length > bestLength) {
+                    bestLength = length; bestX = x; bestStart = runStart;
+                }
+            }
+        }
+        return bestX < 0 ? null
+                : new float[]{bestX + 0.5f, bestStart + bestLength * 0.5f};
     }
 
     private PowerBar detectHorizontal(Bitmap bitmap) {
