@@ -50,6 +50,7 @@ See `docs/pocket-vision-regression.md` for the fixture construction, measured sc
 Verified using JDK 17.0.21, Gradle 9.6.0, Android SDK Platform 35 and Android Build Tools 36.0.0:
 
 - `gradle --no-daemon clean testDebugUnitTest assembleDebug` — **BUILD SUCCESSFUL**.
+- GitHub Actions **Android build and JVM tests** workflow completed successfully on the PR head.
 - **52 JVM tests passed; 0 failures; 0 errors; 0 skipped.**
   - Existing project tests: 29.
   - Instruction-first parser and engine tests: 18.
