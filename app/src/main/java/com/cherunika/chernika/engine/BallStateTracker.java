@@ -2,11 +2,9 @@ package com.cherunika.chernika.engine;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -20,7 +18,6 @@ public final class BallStateTracker {
     private static final double MIN_DETECTION_CONFIDENCE = 0.72;
     private static final double INHERITED_IDENTITY_CONFIDENCE = 0.82;
 
-    private final Map<Integer, BallObservation> lastKnownByNumber = new HashMap<>();
     private List<BallObservation> previousVisible = Collections.emptyList();
     private int stableFrames;
     private boolean baselineEstablished;
@@ -64,7 +61,6 @@ public final class BallStateTracker {
                     && ball.identityConfidence >= 0.78) {
                 if (!usedNumbers.add(ball.number)) duplicateIdentity = true;
                 normalized.add(ball);
-                lastKnownByNumber.put(ball.number, ball);
             }
         }
 
@@ -76,14 +72,12 @@ public final class BallStateTracker {
 
             Integer inherited = findUniqueSpatialIdentity(ball, usedNumbers);
             if (inherited != null) {
-                BallObservation prior = lastKnownByNumber.get(inherited);
                 BallObservation resolved = new BallObservation(
                         ball.center, ball.radius, inherited, false,
                         ball.detectionConfidence,
                         Math.min(INHERITED_IDENTITY_CONFIDENCE, ball.detectionConfidence));
                 normalized.add(resolved);
                 usedNumbers.add(inherited);
-                lastKnownByNumber.put(inherited, resolved);
             } else {
                 normalized.add(new BallObservation(
                         ball.center, ball.radius, 0, false,
@@ -133,19 +127,21 @@ public final class BallStateTracker {
         double bestDistance = Double.POSITIVE_INFINITY;
         double secondDistance = Double.POSITIVE_INFINITY;
 
-        for (Map.Entry<Integer, BallObservation> entry : lastKnownByNumber.entrySet()) {
-            int number = entry.getKey();
-            if (alreadyUsed.contains(number)) continue;
-            BallObservation last = entry.getValue();
-            double distance = unknown.center.distance(last.center);
+        // Only inherit from the immediately preceding frame. A pocketed ball's
+        // stale position must never be reused for a different ball later.
+        for (BallObservation previous : previousVisible) {
+            if (previous.cueBall || previous.number < 1 || previous.number > 9
+                    || previous.identityConfidence < 0.78
+                    || alreadyUsed.contains(previous.number)) continue;
+            double distance = unknown.center.distance(previous.center);
             double maxDistance = Math.max(14.0,
-                    Math.max(unknown.radius, last.radius) * 1.8);
+                    Math.max(unknown.radius, previous.radius) * 1.8);
             if (distance > maxDistance) continue;
 
             if (distance < bestDistance) {
                 secondDistance = bestDistance;
                 bestDistance = distance;
-                bestNumber = number;
+                bestNumber = previous.number;
             } else if (distance < secondDistance) {
                 secondDistance = distance;
             }
@@ -213,7 +209,6 @@ public final class BallStateTracker {
     }
 
     public void reset() {
-        lastKnownByNumber.clear();
         previousVisible = Collections.emptyList();
         stableFrames = 0;
         baselineEstablished = false;
