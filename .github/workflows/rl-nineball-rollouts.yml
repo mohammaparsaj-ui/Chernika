@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'training/chernika_rl/nine_ball_*.py'
+      - 'training/chernika_rl/export_nine_ball_policy.py'
       - 'training/chernika_rl/physics.py'
       - 'app/src/main/java/com/cherunika/chernika/PoolPhysics.java'
       - 'training/chernika_rl/generate_nine_ball_break_data.py'
@@ -67,6 +68,10 @@ jobs:
         working-directory: training
         run: |
           python -m chernika_rl.evaluate_nine_ball_rollouts --model artifacts/nine_ball_rollout_policy.pt --episodes 20 --seed 94000 --max-shots 24 --depth 2 --top-k 3 --output artifacts/nine_ball_rollout_evaluation.json
+      - name: Export Android-compatible rollout policy binary
+        working-directory: training
+        run: |
+          python -m chernika_rl.export_nine_ball_policy --model artifacts/nine_ball_rollout_policy.pt --output artifacts/nine_ball_rollout_policy.bin
       - name: Upload break and full-rack artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -81,6 +86,7 @@ jobs:
             training/artifacts/nine_ball_rollout_dataset.npz
             training/artifacts/nine_ball_rollout_dataset.json
             training/artifacts/nine_ball_rollout_policy.pt
+            training/artifacts/nine_ball_rollout_policy.bin
             training/artifacts/nine_ball_rollout_policy.metrics.json
             training/artifacts/nine_ball_rollout_evaluation.json
           if-no-files-found: error
