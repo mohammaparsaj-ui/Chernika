@@ -28,7 +28,8 @@ Use screen coordinates: x increases right and y increases down.
 Choose a pocket, then compute the ghost-ball center as target_center minus
 unit_vector(target_center -> pocket_center) times (2 * ball_radius + 1 px).
 Aim the cue ball at that ghost-ball center. The required angle_offset_rad is
-wrap_pi(shot_angle - direct_cue_to_target_angle), in radians, in [-pi, pi].
+wrap_pi(shot_angle - direct_cue_to_target_angle), where
+wrap_pi(a) = ((a + pi) mod (2*pi)) - pi. It must be in [-pi, pi].
 Choose power_percent from 0 to 97.8: enough to pot, but avoid excessive power.
 Do not invent coordinates. If no direct shot is viable, choose the safest
 reasonable direct pot attempt. Output schema:
@@ -163,8 +164,12 @@ def main():
             power = float(parsed["power_percent"])
             if not math.isfinite(delta) or not math.isfinite(power):
                 raise ValueError("Non-finite angle or power")
-            delta = max(-math.pi, min(math.pi, delta))
-            power = max(0.0, min(MAX_UI_POWER_PERCENT, power))
+            if not (-math.pi <= delta <= math.pi):
+                raise ValueError("Angle offset must be within [-pi, pi]")
+            if not (0.0 <= power <= MAX_UI_POWER_PERCENT):
+                raise ValueError("Power must be within [0, 97.8]")
+            if parsed.get("pocket") not in {p.name for p in POCKETS}:
+                raise ValueError("Model must select one of the six calibrated pocket names")
             action = np.array([delta / math.pi,
                                2.0 * power / MAX_UI_POWER_PERCENT - 1.0], dtype=np.float32)
             _, reward, _, _, info = env.step(action)
