@@ -85,3 +85,8 @@ If the 9-ball was pocketed or driven off the table on a foul, it is respotted on
 The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
 
 Still outstanding: push-out decisions, the optional three-ball break rule, stalemate re-racks, full opponent strength diversity, multi-rail bank/kick search, spin/throw and live Plato replay validation.
+
+
+### One-cushion kick safety fallback
+
+When direct safety contacts are blocked, the teacher now unfolds the cue-ball path across each of the four cushions and tests a one-rail kick into the lowest-numbered ball. Each candidate must pass the same physics and nine-ball legality checks as other shots. Kick safeties retain a distinct internal shot type but are excluded from all six-pocket imitation labels.
