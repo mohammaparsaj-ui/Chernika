@@ -42,7 +42,9 @@ final class PhysicsShotEvaluator {
         Vec2 direction = plan.aimPoint.subtract(frame.cueBall.center).normalized();
         if (direction.length() < 1e-8) return null;
 
-        PoolPhysics.Result simulation = physics.simulate(frame, direction, plan.powerPercent);
+        PoolPhysics.Result simulation = plan.breakShot
+                ? physics.simulateBreak(frame, direction, plan.powerPercent)
+                : physics.simulate(frame, direction, plan.powerPercent);
         boolean legalFirstContact = simulation.firstContactBall != null
                 && simulation.firstContactBall.number == legalBall;
         boolean targetPocketed = simulation.pocketed(plan.target);

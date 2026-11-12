@@ -32,6 +32,11 @@ final class PoolPhysics {
     private static final double GRAVITY_METERS_PER_SECOND_SQUARED = 9.81;
     private static final double MIN_MOVING_SPEED_PER_RADIUS = 0.05;
     private static final double MIN_COLLISION_SPEED_PER_RADIUS = 0.08;
+    // Revisit simultaneous contacts in a tightly packed rack. A single pass
+    // made energy propagation depend on ball-number iteration order.
+    private static final int BALL_COLLISION_ITERATIONS = 4;
+    // Provisional break-only calibration; normal shots keep the base speed.
+    private static final double BREAK_CUE_SPEED_MULTIPLIER = 4.0;
 
     static final class BallResult {
         final Ball source;
@@ -121,8 +126,18 @@ final class PoolPhysics {
     private enum Rail { LEFT, RIGHT, TOP, BOTTOM }
 
     Result simulate(FrameState frame, Vec2 cueDirection, double powerPercent) {
+        return simulate(frame, cueDirection, powerPercent, 1.0);
+    }
+
+    Result simulateBreak(FrameState frame, Vec2 cueDirection, double powerPercent) {
+        return simulate(frame, cueDirection, powerPercent, BREAK_CUE_SPEED_MULTIPLIER);
+    }
+
+    private Result simulate(FrameState frame, Vec2 cueDirection,
+                            double powerPercent, double cueSpeedMultiplier) {
         if (frame == null || frame.table == null || frame.cueBall == null
-                || cueDirection == null || cueDirection.length() < 1e-8) {
+                || cueDirection == null || cueDirection.length() < 1e-8
+                || !Double.isFinite(cueSpeedMultiplier) || cueSpeedMultiplier <= 0.0) {
             return emptyResult();
         }
 
@@ -149,7 +164,8 @@ final class PoolPhysics {
         double pixelsPerMeter = pixelsPerMeter(frame.table);
         // The user's 97.8% slider reading represents maximum power.
         double normalizedPower = Math.min(1.0, power / MAX_UI_POWER_PERCENT);
-        double speed = normalizedPower * MAX_CUE_SPEED_METERS_PER_SECOND * pixelsPerMeter;
+        double speed = normalizedPower * MAX_CUE_SPEED_METERS_PER_SECOND
+                * cueSpeedMultiplier * pixelsPerMeter;
         Vec2 direction = cueDirection.normalized();
         cue.vx = direction.x * speed;
         cue.vy = direction.y * speed;
@@ -175,40 +191,44 @@ final class PoolPhysics {
 
             if (!anyMoving && step > 0) break;
 
-            for (int i = 0; i < bodies.size(); i++) {
-                Body a = bodies.get(i);
-                if (!a.active()) continue;
-                for (int j = i + 1; j < bodies.size(); j++) {
-                    Body b = bodies.get(j);
-                    if (!b.active()) continue;
-                    double dx = b.x - a.x;
-                    double dy = b.y - a.y;
-                    double minDistance = a.radius + b.radius;
-                    double distanceSquared = dx * dx + dy * dy;
-                    if (distanceSquared >= minDistance * minDistance) continue;
+            // Resolve simultaneous rack contacts over multiple passes so
+            // energy propagation is not dependent on ball-number ordering.
+            for (int iteration = 0; iteration < BALL_COLLISION_ITERATIONS; iteration++) {
+                for (int i = 0; i < bodies.size(); i++) {
+                    Body a = bodies.get(i);
+                    if (!a.active()) continue;
+                    for (int j = i + 1; j < bodies.size(); j++) {
+                        Body b = bodies.get(j);
+                        if (!b.active()) continue;
+                        double dx = b.x - a.x;
+                        double dy = b.y - a.y;
+                        double minDistance = a.radius + b.radius;
+                        double distanceSquared = dx * dx + dy * dy;
+                        if (distanceSquared >= minDistance * minDistance) continue;
 
-                    double distance = Math.sqrt(Math.max(1e-12, distanceSquared));
-                    double nx = distance < 1e-6 ? 1.0 : dx / distance;
-                    double ny = distance < 1e-6 ? 0.0 : dy / distance;
-                    double overlap = minDistance - distance;
-                    double correction = overlap * 0.5 + 0.002;
-                    a.x -= nx * correction;
-                    a.y -= ny * correction;
-                    b.x += nx * correction;
-                    b.y += ny * correction;
+                        double distance = Math.sqrt(Math.max(1e-12, distanceSquared));
+                        double nx = distance < 1e-6 ? 1.0 : dx / distance;
+                        double ny = distance < 1e-6 ? 0.0 : dy / distance;
+                        double overlap = minDistance - distance;
+                        double correction = overlap * 0.5 + 0.002;
+                        a.x -= nx * correction;
+                        a.y -= ny * correction;
+                        b.x += nx * correction;
+                        b.y += ny * correction;
 
-                    double relativeNormalSpeed = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-                    if (relativeNormalSpeed < -collisionSpeed) {
-                        double impulse = -(1.0 + BALL_RESTITUTION) * relativeNormalSpeed * 0.5;
-                        a.vx -= nx * impulse;
-                        a.vy -= ny * impulse;
-                        b.vx += nx * impulse;
-                        b.vy += ny * impulse;
-                        ballCollisions++;
+                        double relativeNormalSpeed = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+                        if (relativeNormalSpeed < -collisionSpeed) {
+                            double impulse = -(1.0 + BALL_RESTITUTION) * relativeNormalSpeed * 0.5;
+                            a.vx -= nx * impulse;
+                            a.vy -= ny * impulse;
+                            b.vx += nx * impulse;
+                            b.vy += ny * impulse;
+                            ballCollisions++;
 
-                        if (firstContactBall == null) {
-                            if (a.source.cue && !b.source.cue) firstContactBall = b.source;
-                            else if (b.source.cue && !a.source.cue) firstContactBall = a.source;
+                            if (firstContactBall == null) {
+                                if (a.source.cue && !b.source.cue) firstContactBall = b.source;
+                                else if (b.source.cue && !a.source.cue) firstContactBall = a.source;
+                            }
                         }
                     }
                 }
