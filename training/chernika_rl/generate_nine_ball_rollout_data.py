@@ -71,7 +71,7 @@ def generate(
 
             plan = plan_result.plan
             total_post_break_actions += 1
-            if plan.shot_type == "safety":
+            if plan.shot_type.startswith("safety"):
                 safety_actions += 1
             else:
                 observations.append(observation.copy())
