@@ -33,6 +33,9 @@ DT = 1.0 / 240.0
 MAX_SIM_SECONDS = 40.0
 MIN_MOVING_SPEED_PER_RADIUS = 0.05
 MIN_COLLISION_SPEED_PER_RADIUS = 0.08
+# Dense racks create simultaneous contacts. Revisit the pairs so collision
+# propagation does not depend on the arbitrary ball-number iteration order.
+BALL_COLLISION_ITERATIONS = 4
 
 @dataclass(frozen=True)
 class Pocket:
@@ -237,39 +240,42 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
         if not any_moving and step > 0:
             break
 
-        # Equal-mass ball-ball collision resolution; preserves Java event order.
-        for i, a in enumerate(bodies):
-            if not a.active():
-                continue
-            for b in bodies[i + 1:]:
-                if not b.active():
+        # Equal-mass ball-ball collision resolution. Multiple passes are
+        # required for dense rack contacts; one pass made energy propagation
+        # depend on the arbitrary order of numbered balls.
+        for _ in range(BALL_COLLISION_ITERATIONS):
+            for i, a in enumerate(bodies):
+                if not a.active():
                     continue
-                dx, dy = b.x - a.x, b.y - a.y
-                min_distance = a.radius + b.radius
-                distance_squared = dx * dx + dy * dy
-                if distance_squared >= min_distance * min_distance:
-                    continue
-                distance = math.sqrt(max(1e-12, distance_squared))
-                nx, ny = ((1.0, 0.0) if distance < 1e-6 else (dx / distance, dy / distance))
-                overlap = min_distance - distance
-                correction = overlap * 0.5 + 0.002
-                a.x -= nx * correction
-                a.y -= ny * correction
-                b.x += nx * correction
-                b.y += ny * correction
-                relative_normal_speed = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny
-                if relative_normal_speed < -collision_speed:
-                    impulse = -(1.0 + BALL_RESTITUTION) * relative_normal_speed * 0.5
-                    a.vx -= nx * impulse
-                    a.vy -= ny * impulse
-                    b.vx += nx * impulse
-                    b.vy += ny * impulse
-                    collisions += 1
-                    if first_contact is None:
-                        if a.source.cue and not b.source.cue:
-                            first_contact = b.source.number
-                        elif b.source.cue and not a.source.cue:
-                            first_contact = a.source.number
+                for b in bodies[i + 1:]:
+                    if not b.active():
+                        continue
+                    dx, dy = b.x - a.x, b.y - a.y
+                    min_distance = a.radius + b.radius
+                    distance_squared = dx * dx + dy * dy
+                    if distance_squared >= min_distance * min_distance:
+                        continue
+                    distance = math.sqrt(max(1e-12, distance_squared))
+                    nx, ny = ((1.0, 0.0) if distance < 1e-6 else (dx / distance, dy / distance))
+                    overlap = min_distance - distance
+                    correction = overlap * 0.5 + 0.002
+                    a.x -= nx * correction
+                    a.y -= ny * correction
+                    b.x += nx * correction
+                    b.y += ny * correction
+                    relative_normal_speed = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny
+                    if relative_normal_speed < -collision_speed:
+                        impulse = -(1.0 + BALL_RESTITUTION) * relative_normal_speed * 0.5
+                        a.vx -= nx * impulse
+                        a.vy -= ny * impulse
+                        b.vx += nx * impulse
+                        b.vy += ny * impulse
+                        collisions += 1
+                        if first_contact is None:
+                            if a.source.cue and not b.source.cue:
+                                first_contact = b.source.number
+                            elif b.source.cue and not a.source.cue:
+                                first_contact = a.source.number
 
         for body in bodies:
             if not body.active():
