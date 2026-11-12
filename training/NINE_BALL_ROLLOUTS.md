@@ -80,7 +80,7 @@ Remaining limitations: only one-cushion banks and kicks are enumerated; multi-ra
 
 The complete-rack evaluator now uses a match-mode shot environment. After any foul, the incoming player receives ball-in-hand anywhere on the cloth. The cue ball is removed from its old position, and a deterministic placement search scores a small set of legal cloth-grid and direct-pot ghost-ball positions with the incoming player's controller before selecting the best placement.
 
-If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the foot spot. If that spot is occupied, the search moves down the long string toward the foot rail first, then above the spot; other object balls are not respotted. Three consecutive fouls by one player lose the rack. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
+If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the foot spot. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three consecutive fouls by one player lose the rack. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
 
 The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
 
