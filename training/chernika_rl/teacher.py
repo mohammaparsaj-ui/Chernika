@@ -7,9 +7,9 @@ import numpy as np
 
 from .physics import (
     Ball, POCKETS, BALL_RADIUS_PX, TABLE_LEFT, TABLE_TOP, TABLE_RIGHT,
-    TABLE_BOTTOM, TABLE_WIDTH_PX, TABLE_HEIGHT_PX, TABLE_WIDTH_METERS,
-    TABLE_LENGTH_METERS, ROLLING_RESISTANCE, GRAVITY, MAX_CUE_SPEED_MPS,
-    MAX_UI_POWER_PERCENT, SimulationResult, simulate, wrap_angle,
+    TABLE_BOTTOM, TABLE_WIDTH_PX, TABLE_WIDTH_METERS, TABLE_LENGTH_METERS,
+    ROLLING_RESISTANCE, GRAVITY, MAX_CUE_SPEED_MPS, MAX_UI_POWER_PERCENT,
+    SimulationResult, simulate, wrap_angle,
 )
 
 
@@ -24,8 +24,8 @@ class TeacherPlan:
 def plan_teacher_shot(cue: Ball, target: Ball) -> TeacherPlan | None:
     """Search ghost-ball candidates and power multipliers, verifying each in physics.
 
-    The planner intentionally mirrors ChernikaSingleBallEnv.heuristic_action so
-    the teacher labels and the established geometric baseline remain comparable.
+    This deliberately mirrors ChernikaSingleBallEnv.heuristic_action so that
+    generated demonstrations remain comparable to the existing baseline.
     """
     direct = math.atan2(target.y - cue.y, target.x - cue.x)
     pixels_per_meter = (TABLE_WIDTH_PX / TABLE_WIDTH_METERS
@@ -84,9 +84,12 @@ def plan_teacher_shot(cue: Ball, target: Ball) -> TeacherPlan | None:
             if score == 0.0:
                 position = result.final_position(target.number)
                 if position is not None:
-                    before = min(math.hypot(target.x - p.x, target.y - p.y) for p in POCKETS)
-                    after = min(math.hypot(position[0] - p.x, position[1] - p.y) for p in POCKETS)
-                    score += max(-1.0, min(1.0, (before - after) / TABLE_WIDTH_PX))
+                    after = min(
+                        math.hypot(position[0] - p.x, position[1] - p.y)
+                        for p in POCKETS
+                    )
+                    score += max(-1.0, min(1.0,
+                        (object_distance - after) / TABLE_WIDTH_PX))
 
             candidates.append(TeacherPlan(action, pocket_index, score, result))
 
