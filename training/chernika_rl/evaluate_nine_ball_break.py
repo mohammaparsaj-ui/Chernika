@@ -79,7 +79,7 @@ def main():
         "benchmark": "Chernika nine-ball break imitation, held-out diamond racks",
         "seed_start": args.seed,
         "break_cue_speed_multiplier": BREAK_CUE_SPEED_MULTIPLIER,
-        "break_aim_strategy": "second-row target with legal first contact on ball 1",
+        "break_aim_strategy": "second-row aim lines; Plato permits any first object-ball contact",
         "requested_episodes": args.episodes,
         "evaluated_episodes": len(rows["physics_teacher"]),
         "racks_without_teacher_break": teacher_unavailable,

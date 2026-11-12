@@ -449,7 +449,8 @@ def plan_nine_ball_shot(
 ) -> NineBallPlan | None:
     """Find a legal, physics-verified direct shot for the current 9-ball state.
 
-    On the break, test centered and small-offset hits on the #1 apex ball.
+    On the break, test centered and second-row aim lines. Plato's break is
+    exempt from lowest-first contact, so any first object ball is accepted.
     In normal play, enumerate ghost-ball paths from the lowest ball to all six
     measured pockets. Other object balls stay in the simulation, so a blocked
     path or wrong first contact is rejected by the shared rule assessor.

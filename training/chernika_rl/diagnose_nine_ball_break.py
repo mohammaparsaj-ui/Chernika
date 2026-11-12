@@ -1,4 +1,4 @@
-"""Diagnose why candidate nine-ball breaks fail the four-ball rail rule."""
+"""Diagnose Plato 9-ball break candidates against a recorded rack outcome."""
 from __future__ import annotations
 
 import argparse
@@ -35,7 +35,10 @@ def diagnose_canonical_reference() -> dict:
         (TABLE_LEFT + TABLE_RIGHT) * 0.5,
         306.5,
     )
-    delta_angles = (-0.02, -0.01, 0.0, 0.01, 0.02)
+    delta_angles = (
+        -0.15, -0.125, -0.10, -0.075, -0.05, -0.025, 0.0,
+        0.025, 0.05, 0.075, 0.10, 0.125, 0.15,
+    )
     powers = (97.8,)
     speed_multipliers = (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0)
     observed_positions = {
@@ -117,7 +120,7 @@ def diagnose_canonical_reference() -> dict:
                             + 250.0 * int(cue_missing)
                             + 100.0 * abs(len(assessment.pocketed_numbers) - 2)
                             + 200.0 * int(not assessment.legal_shot)
-                            + 500.0 * int(result.first_contact_number != 1)
+                            + 500.0 * int(result.first_contact_number is None)
                         )
                         candidates.append({
                             "cue": [cue_x, cue_y],
@@ -128,7 +131,8 @@ def diagnose_canonical_reference() -> dict:
                             "power_percent": power,
                             "cue_speed_multiplier": speed_multiplier,
                             "first_contact": result.first_contact_number,
-                            "correct_first_contact": result.first_contact_number == 1,
+                            "has_object_ball_contact": result.first_contact_number is not None,
+                            "first_contact_matches_apex": result.first_contact_number == 1,
                             "legal": assessment.legal_shot,
                             "foul_reason": assessment.foul_reason,
                             "pocketed_numbers": list(assessment.pocketed_numbers),
@@ -148,7 +152,8 @@ def diagnose_canonical_reference() -> dict:
     legal = [row for row in candidates if row["legal"]]
     valid = [
         row for row in candidates
-        if row["correct_first_contact"] and not row["scratch"] and not row["off_table"]
+        if row["has_object_ball_contact"] and row["legal"]
+        and not row["scratch"] and not row["off_table"]
     ]
     best = max(
         valid,
@@ -170,8 +175,8 @@ def diagnose_canonical_reference() -> dict:
         "candidate_count": len(candidates),
         "legal_candidate_count": len(legal),
         "legal_candidate_rate": len(legal) / max(1, len(candidates)),
-        "correct_first_contact_candidate_count": len(valid),
-        "best_valid_candidate": best,
+        "object_contact_candidate_count": len(valid),
+        "best_legal_candidate": best,
         "best_fit_candidates": best_fit,
         "speed_multipliers_tested": list(speed_multipliers),
         "candidates": candidates,
@@ -217,7 +222,7 @@ def diagnose(
                 "seed": rack_seed,
                 "teacher_plan_found": False,
                 "legal": False,
-                "correct_first_contact": False,
+                "has_object_ball_contact": False,
                 "spread": 0,
                 "pocketed_numbers": [],
             })
@@ -229,7 +234,8 @@ def diagnose(
             "seed": rack_seed,
             "teacher_plan_found": True,
             "legal": assessment.legal_shot,
-            "correct_first_contact": result.first_contact_number == 1,
+            "has_object_ball_contact": result.first_contact_number is not None,
+            "first_contact_matches_apex": result.first_contact_number == 1,
             "first_contact": result.first_contact_number,
             "shot_type": plan.shot_type,
             "action": plan.action.tolist(),
@@ -249,7 +255,10 @@ def diagnose(
 
     planned = [row for row in per_rack if row["teacher_plan_found"]]
     legal = [row for row in planned if row["legal"]]
-    valid = [row for row in planned if row["correct_first_contact"]]
+    valid = [
+        row for row in planned
+        if row["has_object_ball_contact"] and row["legal"]
+    ]
     spread_histogram = Counter(str(row["spread"]) for row in valid)
     return {
         "benchmark": "nine-ball break teacher diagnostic",
@@ -261,7 +270,7 @@ def diagnose(
             "used by break demonstration generation"
         ),
         "racks_with_teacher_plan": len(planned),
-        "racks_with_correct_first_contact": len(valid),
+        "racks_with_object_ball_contact": len(valid),
         "racks_with_legal_break_candidate": len(legal),
         "legal_break_candidate_rate": len(legal) / racks,
         "mean_best_valid_contact_spread": (
