@@ -6,10 +6,23 @@ import java.util.List;
 final class ShotPlanner {
     private final DiamondRackDetector rackDetector = new DiamondRackDetector();
     private final PhysicsShotEvaluator physicsEvaluator = new PhysicsShotEvaluator();
+    private final NineBallImitationPolicy imitationPolicy;
 
-    ShotPlan plan(FrameState frame, int legalBall) { return plan(frame, legalBall, 0); }
+    ShotPlanner() { this(null); }
+
+    ShotPlanner(NineBallImitationPolicy imitationPolicy) {
+        this.imitationPolicy = imitationPolicy;
+    }
+
+    ShotPlan plan(FrameState frame, int legalBall) {
+        return plan(frame, legalBall, 0, 0);
+    }
 
     ShotPlan plan(FrameState frame, int legalBall, int objectiveBall) {
+        return plan(frame, legalBall, objectiveBall, 0);
+    }
+
+    ShotPlan plan(FrameState frame, int legalBall, int objectiveBall, int shotCount) {
         if (frame == null || frame.table == null || frame.cueBall == null
                 || legalBall < 1 || legalBall > 9) return null;
         Ball target = null;
@@ -17,6 +30,9 @@ final class ShotPlanner {
             if (!ball.cue && ball.number == legalBall) { target = ball; break; }
         }
         if (target == null) return null;
+
+        int[] preferredPocketIndices = preferredPocketIndices(
+                frame, legalBall, objectiveBall, shotCount);
 
         if (objectiveBall == 9 && legalBall != 9) {
             Ball nine = null;
@@ -44,7 +60,48 @@ final class ShotPlanner {
                 if (bank != null) candidates.add(bank);
             }
         }
+        if (preferredPocketIndices != null && preferredPocketIndices.length > 0) {
+            List<ShotPlan> neuralCandidates = new ArrayList<>();
+            for (ShotPlan candidate : candidates) {
+                int index = pocketIndex(frame.table, candidate.pocket);
+                for (int preferred : preferredPocketIndices) {
+                    if (index == preferred) {
+                        neuralCandidates.add(candidate);
+                        break;
+                    }
+                }
+            }
+            // Keep the physics-only route search as a safety fallback if the
+            // neural top-3 has no geometrically feasible candidate.
+            if (!neuralCandidates.isEmpty()) candidates = neuralCandidates;
+        }
         return rankWithPhysics(frame, candidates, legalBall, objectiveBall);
+    }
+
+    private int[] preferredPocketIndices(FrameState frame, int legalBall,
+                                         int objectiveBall, int shotCount) {
+        if (imitationPolicy == null || frame == null || frame.table == null
+                || (objectiveBall == 9 && legalBall != 9)) {
+            return null;
+        }
+        try {
+            float[] observation = NineBallObservationEncoder.encode(
+                    frame, legalBall, false, shotCount);
+            return imitationPolicy.predict(observation, 3).rankedPocketIndices;
+        } catch (IllegalArgumentException | IllegalStateException ignored) {
+            // Vision may leave an object-ball identity unresolved for this
+            // frame. Never let uncertain OCR disable the geometric fallback.
+            return null;
+        }
+    }
+
+    private int pocketIndex(TableGeometry table, Pocket candidate) {
+        if (table == null || candidate == null) return -1;
+        List<Pocket> pockets = table.pockets();
+        for (int i = 0; i < pockets.size(); i++) {
+            if (pockets.get(i).id == candidate.id) return i;
+        }
+        return -1;
     }
 
     /**
