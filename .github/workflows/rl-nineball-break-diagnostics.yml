@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'training/chernika_rl/diagnose_nine_ball_break.py'
+      - 'training/chernika_rl/physics.py'
+      - 'app/src/main/java/com/cherunika/chernika/PoolPhysics.java'
       - '.github/workflows/rl-nineball-break-diagnostics.yml'
   workflow_dispatch:
 
