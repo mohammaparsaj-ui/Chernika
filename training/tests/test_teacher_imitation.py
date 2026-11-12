@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from chernika_rl.env import ChernikaSingleBallEnv
-from chernika_rl.imitation import ImitationPolicy, predict
+from chernika_rl.imitation import ImitationPolicy, predict, predict_top_pockets
 from chernika_rl.physics import Ball, POCKETS, BALL_RADIUS_PX
 from chernika_rl.teacher import plan_teacher_shot, plan_teacher_shot_for_pocket
 
@@ -66,3 +66,24 @@ def test_pocket_conditioned_physics_planner_rejects_invalid_index():
         pass
     else:
         raise AssertionError("invalid pocket index must raise ValueError")
+
+
+
+def test_predict_top_pockets_returns_ranked_unique_candidates():
+    policy = ImitationPolicy()
+    observation = np.zeros(16, dtype=np.float32)
+    action, pockets = predict_top_pockets(policy, observation, top_k=2)
+    assert action.shape == (2,)
+    assert len(pockets) == 2
+    assert len(set(pockets)) == 2
+    assert all(0 <= pocket < 6 for pocket in pockets)
+
+
+def test_predict_top_pockets_rejects_invalid_top_k():
+    policy = ImitationPolicy()
+    try:
+        predict_top_pockets(policy, np.zeros(16, dtype=np.float32), top_k=0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("top_k=0 must raise ValueError")
