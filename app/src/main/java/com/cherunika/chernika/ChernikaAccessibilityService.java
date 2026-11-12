@@ -21,6 +21,7 @@ import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,7 +37,9 @@ public class ChernikaAccessibilityService extends AccessibilityService {
     private final AtomicBoolean captureBusy = new AtomicBoolean(false);
     private final VisionAnalyzer vision = new VisionAnalyzer();
     private final TargetAnnouncementParser parser = new TargetAnnouncementParser();
-    private final ShotPlanner planner = new ShotPlanner();
+    private ShotPlanner planner = new ShotPlanner();
+    private boolean neuralPolicyLoaded;
+    private int shotsSinceRack;
     private final LowestBallSelector lowestBallSelector = new LowestBallSelector();
     private final DiamondRackDetector rackDetector = new DiamondRackDetector();
     private TextRecognizer recognizer;
@@ -66,11 +69,23 @@ public class ChernikaAccessibilityService extends AccessibilityService {
         info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
         setServiceInfo(info);
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+        try (InputStream modelStream = getAssets().open("nine_ball_policy.bin")) {
+            NineBallImitationPolicy policy = NineBallImitationPolicy.load(modelStream);
+            planner = new ShotPlanner(policy);
+            neuralPolicyLoaded = true;
+        } catch (Exception ignored) {
+            // The APK remains usable without a trained asset; the existing
+            // geometry + physics planner is the safe default.
+            planner = new ShotPlanner();
+            neuralPolicyLoaded = false;
+        }
         if (!loopStarted) {
             loopStarted = true;
             handler.post(loop);
         }
-        setStatus("Accessibility connected. Engine is waiting for Start.");
+        setStatus(neuralPolicyLoaded
+                ? "Accessibility connected · nine-ball neural policy loaded · waiting for Start."
+                : "Accessibility connected · physics-only fallback · waiting for Start.");
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -329,14 +344,19 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             // A break instruction and a verified diamond rack take priority
             // over the simultaneous "Hit the 1-ball" HUD hint.
             if (announcement.breakTurn || rack.detected) {
-                if (rack.detected) plan = planner.planBreak(frame);
+                if (rack.detected) {
+                    shotsSinceRack = 0;
+                    plan = planner.planBreak(frame);
+                }
             } else if (announcement.hasTarget()) {
-                plan = planner.plan(frame, announcement.legalBall, announcement.objectiveBall);
+                plan = planner.plan(
+                        frame, announcement.legalBall,
+                        announcement.objectiveBall, shotsSinceRack);
             } else {
                 LowestBallSelector.Selection selection =
                         lowestBallSelector.select(frame.balls, 0);
                 if (selection.isConfident()) {
-                    plan = planner.plan(frame, selection.number, 0);
+                    plan = planner.plan(frame, selection.number, 0, shotsSinceRack);
                 }
             }
 
@@ -399,7 +419,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             setStatus("Scratch detected. Waiting for the next legal-ball announcement before repositioning.");
             return;
         }
-        ShotPlan current = planner.plan(frame, announcement.legalBall, announcement.objectiveBall);
+        ShotPlan current = planner.plan(
+                frame, announcement.legalBall, announcement.objectiveBall, shotsSinceRack);
         if (current != null) {
             setStatus("Scratch detected, but a clear potting route already exists. Keeping the cue ball in place.");
             return;
@@ -452,6 +473,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
                     if (fired) {
                         lastShotSignature = signature;
                         lastShotAt = System.currentTimeMillis();
+                        shotsSinceRack = plan.breakShot
+                                ? 1 : Math.min(24, shotsSinceRack + 1);
                         shotInFlight = true;
                         stableFrameCount = 0;
                         previousBallPositions.clear();
