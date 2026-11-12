@@ -26,6 +26,7 @@ def generate(
     observations, actions, pockets, groups = [], [], [], []
     scores, successes, first_contacts = [], [], []
     legal_breaks = break_fouls = break_wins = no_plan_states = 0
+    safety_actions = total_post_break_actions = turn_handoffs = 0
     rack_wins = rack_fouls = 0
     states_per_rack = []
 
@@ -48,6 +49,8 @@ def generate(
             states_per_rack.append(0)
             continue
         legal_breaks += 1
+        if not break_info["pocketed_numbers"]:
+            turn_handoffs += 1
         if break_info["win"]:
             break_wins += 1
             rack_wins += 1
@@ -67,18 +70,24 @@ def generate(
                 break
 
             plan = plan_result.plan
-            observations.append(observation.copy())
-            actions.append(plan.action)
-            pockets.append(plan.pocket_index)
-            groups.append(index)
-            scores.append(plan_result.total_score)
-            successes.append(bool(plan.assessment.pocketed_numbers))
-            first_contacts.append(
-                plan.result.first_contact_number == plan.legal_ball
-            )
-            rack_states += 1
+            total_post_break_actions += 1
+            if plan.shot_type == "safety":
+                safety_actions += 1
+            else:
+                observations.append(observation.copy())
+                actions.append(plan.action)
+                pockets.append(plan.pocket_index)
+                groups.append(index)
+                scores.append(plan_result.total_score)
+                successes.append(bool(plan.assessment.pocketed_numbers))
+                first_contacts.append(
+                    plan.result.first_contact_number == plan.legal_ball
+                )
+                rack_states += 1
 
             observation, _, terminated, truncated, info = env.step(plan.action)
+            if info["legal_shot"] and not info["pocketed_numbers"]:
+                turn_handoffs += 1
             if info["foul"]:
                 rack_fouls += 1
                 break
@@ -102,8 +111,14 @@ def generate(
         "break_wins": break_wins,
         "rack_wins": rack_wins,
         "rack_fouls": rack_fouls,
-        "states_without_direct_plan": no_plan_states,
-        "mean_post_break_states_per_rack": float(np.mean(states_per_rack)),
+        "states_without_any_legal_plan": no_plan_states,
+        "safety_actions_excluded_from_pocket_imitation": safety_actions,
+        "total_post_break_actions": total_post_break_actions,
+        "legal_turn_handoffs": turn_handoffs,
+        "mean_pot_demonstrations_per_rack": float(np.mean(states_per_rack)),
+        "teacher_pot_demonstration_rate": (
+            len(observations) / max(1, total_post_break_actions)
+        ),
         "seed_start": seed,
         "max_shots": max_shots,
         "teacher_lookahead_depth": depth,
@@ -112,7 +127,9 @@ def generate(
         "observation_size": 52,
         "state_distribution": (
             "post-break states reached by legal physics-teacher breaks and "
-            "teacher-driven sequential shots on seeded 1-2-3-2-1 diamond racks"
+            "teacher self-play with legal no-pot turn handoffs on seeded "
+            "1-2-3-2-1 diamond racks; safety actions are executed but excluded "
+            "from the six-pocket imitation labels"
         ),
     }
     return {

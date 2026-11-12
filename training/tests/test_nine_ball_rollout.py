@@ -1,4 +1,6 @@
-from chernika_rl.nine_ball_rollout import run_rack, summarize_racks
+from chernika_rl.nine_ball_rollout import (
+    _next_player_after_shot, run_rack, summarize_racks,
+)
 
 
 def test_single_shot_limit_produces_a_bounded_rack_trajectory():
@@ -19,6 +21,7 @@ def test_rack_summary_reports_win_and_break_metrics():
     rows = [
         {
             "win": True,
+            "winner": 0,
             "break_legal": True,
             "status": "win",
             "foul": False,
@@ -29,6 +32,7 @@ def test_rack_summary_reports_win_and_break_metrics():
         },
         {
             "win": False,
+            "winner": 1,
             "break_legal": False,
             "status": "break_foul",
             "foul": True,
@@ -44,3 +48,10 @@ def test_rack_summary_reports_win_and_break_metrics():
     assert metrics["rack_win_rate"] == 0.5
     assert metrics["legal_break_rate"] == 0.5
     assert metrics["break_foul_rate"] == 0.5
+
+
+
+def test_legal_no_pot_passes_turn_but_a_legal_pot_retains_it():
+    assert _next_player_after_shot(0, True, []) == 1
+    assert _next_player_after_shot(1, True, [3]) == 1
+    assert _next_player_after_shot(0, False, []) == 0

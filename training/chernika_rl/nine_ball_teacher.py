@@ -180,7 +180,10 @@ def _evaluate_pot_route(
             mirrored_cue, (ghost_x, ghost_y), rail
         ) is None:
             return None
-        vx, vy = ghost_x - mirrored_cue[0], ghost_y - mirrored_cue[1]
+        contact_angle = math.atan2(
+            ghost_y - mirrored_cue[1], ghost_x - mirrored_cue[0]
+        )
+        vx, vy = math.cos(contact_angle), math.sin(contact_angle)
         if rail in ("left", "right"):
             vx = -vx
         else:
@@ -200,11 +203,15 @@ def _evaluate_pot_route(
         if cue_distance < 2.0 * BALL_RADIUS_PX:
             return None
         shot_angle = math.atan2(cue_dy, cue_dx)
+        contact_angle = shot_angle
 
     direct = math.atan2(target.y - cue.y, target.x - cue.x)
     angle_offset = wrap_angle(shot_angle - direct)
     object_angle = math.atan2(uy, ux)
-    contact_cos = math.cos(wrap_angle(shot_angle - object_angle))
+    if shot_type == "kick":
+        contact_cos = math.cos(wrap_angle(contact_angle - object_angle))
+    else:
+        contact_cos = math.cos(wrap_angle(shot_angle - object_angle))
     if contact_cos <= 0.18:
         return None
 
@@ -223,7 +230,11 @@ def _evaluate_pot_route(
 
     route_penalty = {"direct": 0.0, "bank": 2.0, "kick": 3.0}[shot_type]
     best: NineBallPlan | None = None
-    for multiplier in (0.75, 0.90, 1.00, 1.10, 1.25, 1.40):
+    power_multipliers = (
+        (0.75, 0.90, 1.00, 1.10, 1.25, 1.40)
+        if shot_type == "direct" else (0.85, 1.00, 1.20)
+    )
+    for multiplier in power_multipliers:
         power = min(
             MAX_UI_POWER_PERCENT,
             max(1.0, base_power * multiplier),
@@ -331,8 +342,8 @@ def _plan_safety_shot(
     maximum_offset = math.asin(min(
         0.95, (cue.radius + target.radius - 0.25) / distance
     ))
-    fractions = (-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0)
-    powers = (25.0, 40.0, 55.0, 70.0, 85.0, MAX_UI_POWER_PERCENT)
+    fractions = (-1.0, -0.5, 0.0, 0.5, 1.0)
+    powers = (35.0, 55.0, 75.0, MAX_UI_POWER_PERCENT)
     best: NineBallPlan | None = None
 
     for fraction in fractions:
@@ -451,7 +462,7 @@ def plan_nine_ball_shot(
                 if second_ball_line:
                     score += 0.5
                 candidates.append(NineBallPlan(
-                    action, legal_ball, -1, score, result, assessment, True
+                    action, legal_ball, -1, score, result, assessment, True, "break"
                 ))
     else:
         selected_pockets = (

@@ -37,7 +37,8 @@ def _candidate_plans(
     candidates = []
     for pocket_index in pocket_indices:
         candidate = plan_nine_ball_shot(
-            cue, balls, break_shot=False, pocket_indices=[pocket_index]
+            cue, balls, break_shot=False, pocket_indices=[pocket_index],
+            allow_safety=False,
         )
         if candidate is not None and candidate.assessment.legal_shot:
             candidates.append(candidate)
@@ -81,6 +82,7 @@ def plan_nine_ball_shot_lookahead(
     discount: float = 0.65,
     beam_width: int = 3,
     pocket_indices: list[int] | tuple[int, ...] | None = None,
+    allow_safety: bool = True,
 ) -> LookaheadPlan | None:
     """Choose a first shot using immediate physics score plus one continuation.
 
@@ -105,6 +107,7 @@ def plan_nine_ball_shot_lookahead(
         plan = plan_nine_ball_shot(
             cue, balls, break_shot=False,
             pocket_indices=None if pocket_indices is None else selected,
+            allow_safety=allow_safety,
         )
         if plan is None:
             return None
@@ -112,14 +115,30 @@ def plan_nine_ball_shot_lookahead(
             plan=plan,
             total_score=plan.score,
             next_score=None,
-            planned_pockets=(plan.pocket_index,),
+            planned_pockets=(
+                () if plan.shot_type == "safety" else (plan.pocket_index,)
+            ),
             candidate_count=1,
             future_candidate_count=0,
         )
 
     roots = _candidate_plans(cue, balls, selected)
     if not roots:
-        return None
+        if not allow_safety:
+            return None
+        safety = plan_nine_ball_shot(
+            cue, balls, break_shot=False, allow_safety=True
+        )
+        if safety is None:
+            return None
+        return LookaheadPlan(
+            plan=safety,
+            total_score=safety.score,
+            next_score=None,
+            planned_pockets=(),
+            candidate_count=0,
+            future_candidate_count=0,
+        )
 
     ranked_roots = sorted(roots, key=lambda candidate: candidate.score, reverse=True)
     beam_ids = {id(candidate) for candidate in ranked_roots[:beam_width]}
@@ -145,7 +164,12 @@ def plan_nine_ball_shot_lookahead(
                     next_score = best_future.score
                     future_pocket = best_future.pocket_index
                 else:
-                    next_score = -25.0
+                    safety_followup = plan_nine_ball_shot(
+                        next_cue, next_balls, allow_safety=True
+                    )
+                    next_score = (
+                        safety_followup.score if safety_followup is not None else -25.0
+                    )
             total_score += discount * next_score
 
         path = (candidate.pocket_index,)

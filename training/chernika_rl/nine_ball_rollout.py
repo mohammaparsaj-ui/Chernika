@@ -58,7 +58,8 @@ def _choose_plan(
             policy, observation, top_k=top_k
         )
         result = plan_nine_ball_shot_lookahead(
-            cue, balls, depth=depth, pocket_indices=ranked_pockets
+            cue, balls, depth=depth, pocket_indices=ranked_pockets,
+            allow_safety=False,
         )
         if result is not None:
             return result.plan, {
@@ -71,7 +72,9 @@ def _choose_plan(
                 "neural_pockets": ranked_pockets,
             }
 
-        fallback = plan_nine_ball_shot_lookahead(cue, balls, depth=depth)
+        fallback = plan_nine_ball_shot_lookahead(
+            cue, balls, depth=depth, allow_safety=True
+        )
         if fallback is None:
             return None, {
                 "neural_fallback": True,
@@ -90,6 +93,17 @@ def _choose_plan(
     raise ValueError(f"unknown rollout strategy: {strategy}")
 
 
+def _next_player_after_shot(
+    current_player: int,
+    legal_shot: bool,
+    pocketed_numbers: list[int] | tuple[int, ...],
+) -> int:
+    """Keep the turn after a legal pot; otherwise pass it to the opponent."""
+    if not legal_shot or pocketed_numbers:
+        return current_player
+    return 1 - current_player
+
+
 def run_rack(
     seed: int,
     *,
@@ -98,15 +112,19 @@ def run_rack(
     max_shots: int = 24,
     depth: int = 2,
     top_k: int = 3,
+    opponent_strategy: str = "teacher_greedy",
 ) -> dict[str, Any]:
-    """Play one synthetic diamond rack until win, foul, no-plan or shot limit.
+    """Play one seeded rack with the selected controller against a greedy opponent.
 
-    The break is physics-teacher controlled for every strategy. The selected
-    strategy controls all post-break shots. A foul ends this single-agent
-    practice rollout; opponent turns and ball-in-hand are not simulated.
+    Player 0 uses strategy; player 1 uses opponent_strategy. Legal pots retain
+    the turn and legal no-pot shots (including safeties) hand it over. The break
+    is physics-teacher controlled. Fouls end the rollout until ball-in-hand and
+    9-ball respotting are implemented.
     """
     if strategy not in STRATEGIES:
         raise ValueError(f"strategy must be one of {STRATEGIES}")
+    if opponent_strategy not in ("teacher_greedy", "teacher_lookahead"):
+        raise ValueError("opponent_strategy must be teacher_greedy or teacher_lookahead")
     if max_shots < 1:
         raise ValueError("max_shots must be positive")
     if depth not in (1, 2):
@@ -130,6 +148,9 @@ def run_rack(
     win = False
     foul = False
     total_pocketed = 0
+    winner: int | None = None
+    current_player = 0
+    turn_switches = 0
 
     break_plan = plan_nine_ball_shot(
         env.cue, list(env.object_balls.values()), break_shot=True
@@ -147,7 +168,9 @@ def run_rack(
         foul = bool(info["foul"])
         records.append({
             "shot": 1,
+            "player": 0,
             "break": True,
+            "shot_type": break_plan.shot_type,
             "legal_ball": info["legal_ball"],
             "first_contact": info["first_contact"],
             "legal": info["legal_shot"],
@@ -168,6 +191,7 @@ def run_rack(
         })
         if win:
             status = "win"
+            winner = 0
         elif foul:
             status = "break_foul"
         elif truncated:
@@ -175,12 +199,24 @@ def run_rack(
         elif terminated:
             status = "rack_ended_without_win"
         else:
+            next_player = _next_player_after_shot(
+                0, info["legal_shot"], info["pocketed_numbers"]
+            )
+            if next_player != 0:
+                turn_switches += 1
+            current_player = next_player
             status = "in_progress"
 
     while status == "in_progress" and env.shot_count < max_shots:
         cue_before = (env.cue.x, env.cue.y) if env.cue is not None else None
+        active_strategy = strategy if current_player == 0 else opponent_strategy
+        active_policy = (
+            policy
+            if current_player == 0 and active_strategy == "hybrid_top3_lookahead"
+            else None
+        )
         plan, planning = _choose_plan(
-            strategy, env, observation, policy, depth, top_k
+            active_strategy, env, observation, active_policy, depth, top_k
         )
         if plan is None:
             status = "no_legal_plan"
@@ -191,7 +227,10 @@ def run_rack(
         total_pocketed += len(info["pocketed_numbers"])
         records.append({
             "shot": info["shot_count"],
+            "player": current_player,
             "break": False,
+            "shot_type": plan.shot_type,
+            "active_strategy": active_strategy,
             "legal_ball": info["legal_ball"],
             "first_contact": info["first_contact"],
             "legal": info["legal_shot"],
@@ -214,6 +253,7 @@ def run_rack(
 
         if info["win"]:
             win = True
+            winner = current_player
             status = "win"
         elif info["foul"]:
             foul = True
@@ -222,6 +262,13 @@ def run_rack(
             status = "rack_ended_without_win"
         elif truncated:
             status = "max_shots"
+        else:
+            next_player = _next_player_after_shot(
+                current_player, info["legal_shot"], info["pocketed_numbers"]
+            )
+            if next_player != current_player:
+                turn_switches += 1
+            current_player = next_player
 
     if status == "in_progress":
         status = "max_shots" if env.shot_count >= max_shots else "stopped"
@@ -229,8 +276,10 @@ def run_rack(
     return {
         "seed": seed,
         "strategy": strategy,
+        "opponent_strategy": opponent_strategy,
         "status": status,
         "win": win,
+        "winner": winner,
         "foul": foul,
         "break_legal": break_legal,
         "break_spread": break_spread,
@@ -241,6 +290,7 @@ def run_rack(
         "initial_balls": initial_balls,
         "remaining_balls": sorted(env.object_balls),
         "neural_fallback_count": fallback_count,
+        "turn_switches": turn_switches,
         "trajectory": records,
     }
 
@@ -249,14 +299,22 @@ def summarize_racks(rows: list[dict[str, Any]]) -> dict[str, Any]:
     count = len(rows)
     if count == 0:
         return {"racks": 0}
-    winners = [row for row in rows if row["win"]]
+    winners = [row for row in rows if row.get("winner") is not None]
+    candidate_wins = sum(row.get("winner") == 0 for row in rows)
+    opponent_wins = sum(row.get("winner") == 1 for row in rows)
     return {
         "racks": count,
-        "rack_win_rate": sum(row["win"] for row in rows) / count,
+        "rack_win_rate": candidate_wins / count,
+        "candidate_win_rate": candidate_wins / count,
+        "opponent_win_rate": opponent_wins / count,
+        "completed_rack_rate": sum(row["status"] == "win" for row in rows) / count,
         "legal_break_rate": sum(row["break_legal"] for row in rows) / count,
         "break_foul_rate": sum(row["status"] == "break_foul" for row in rows) / count,
         "mid_rack_foul_rate": sum(
             row["foul"] and row["status"] == "foul" for row in rows
+        ) / count,
+        "total_foul_rate": sum(
+            row["status"] in ("break_foul", "foul") for row in rows
         ) / count,
         "no_legal_plan_rate": sum(row["status"] == "no_legal_plan" for row in rows) / count,
         "max_shot_rate": sum(row["status"] == "max_shots" for row in rows) / count,
@@ -270,6 +328,13 @@ def summarize_racks(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "mean_neural_fallbacks_per_rack": float(np.mean([
             row["neural_fallback_count"] for row in rows
+        ])),
+        "mean_safety_shots_per_rack": float(np.mean([
+            sum(shot.get("shot_type") == "safety" for shot in row["trajectory"])
+            for row in rows
+        ])),
+        "mean_turn_switches": float(np.mean([
+            row.get("turn_switches", 0) for row in rows
         ])),
     }
 
@@ -302,6 +367,7 @@ def evaluate_racks(
                 max_shots=max_shots,
                 depth=depth,
                 top_k=top_k,
+                opponent_strategy="teacher_greedy",
             ))
 
     return {
@@ -320,8 +386,10 @@ def evaluate_racks(
         },
         "note": (
             "Synthetic seeded diamond racks on the current Python physics port. "
-            "The break remains physics-teacher controlled. A foul ends the "
-            "single-agent practice rollout; opponent turns, ball-in-hand, "
-            "9-ball respotting and live Plato replay validation are not modeled."
+            "The break remains physics-teacher controlled. Player 0 uses the "
+            "selected controller and player 1 uses the greedy physics teacher; "
+            "legal no-pot shots pass the turn. Fouls still end the rollout "
+            "because ball-in-hand, 9-ball respotting and live Plato replay "
+            "validation are not modeled."
         ),
     }

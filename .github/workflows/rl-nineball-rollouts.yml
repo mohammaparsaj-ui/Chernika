@@ -41,7 +41,7 @@ jobs:
         working-directory: training
         run: |
           python -m chernika_rl.diagnose_nine_ball_break --racks 1 --seed 90900 --output artifacts/nine_ball_break_diagnostic.json
-      - name: Generate 400 break demonstrations
+      - name: Generate 250 break demonstrations
         working-directory: training
         run: |
           python -m chernika_rl.generate_nine_ball_break_data --racks 250 --seed 91000 --output artifacts/nine_ball_break_dataset.npz
