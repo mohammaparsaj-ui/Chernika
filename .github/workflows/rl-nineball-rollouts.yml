@@ -60,7 +60,7 @@ jobs:
       - name: Train 52-input rollout policy
         working-directory: training
         run: |
-          python -m chernika_rl.train_imitation --data artifacts/nine_ball_rollout_dataset.npz --epochs 80 --batch-size 128 --seed 9321 --min-demonstrations 50 --symmetry-augmentation --output artifacts/nine_ball_rollout_policy.pt
+          python -m chernika_rl.train_imitation --data artifacts/nine_ball_rollout_dataset.npz --epochs 80 --batch-size 128 --seed 9321 --min-demonstrations 50 --symmetry-augmentation --action-loss-weight 0.25 --output artifacts/nine_ball_rollout_policy.pt
       - name: Evaluate 20 complete unseen racks
         working-directory: training
         run: |
