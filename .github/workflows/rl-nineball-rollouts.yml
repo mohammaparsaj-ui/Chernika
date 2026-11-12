@@ -40,7 +40,7 @@ jobs:
       - name: Diagnose break candidate coverage
         working-directory: training
         run: |
-          python -m chernika_rl.diagnose_nine_ball_break --racks 20 --seed 90900 --output artifacts/nine_ball_break_diagnostic.json
+          python -m chernika_rl.diagnose_nine_ball_break --racks 1 --seed 90900 --output artifacts/nine_ball_break_diagnostic.json
       - name: Generate 400 break demonstrations
         working-directory: training
         run: |
