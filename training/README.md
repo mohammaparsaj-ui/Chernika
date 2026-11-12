@@ -1,0 +1,87 @@
+# Chernika RL — Phase 1: learn to aim and control power
+
+This is an **offline training project**, separate from the Android APK. It trains a continuous-control agent to pocket one target ball in Chernika's calibrated portrait table before the agent is allowed to control Plato.
+
+## Why this design
+
+- **Billiards-RL** is the reference for the SAC curriculum and its continuous action space (angle offset + strike speed): <https://github.com/yongjin-shin/billiards-rl>.
+- **CueTip** is the reference for the higher-level architecture: a language model proposes a tactical intention, while a physics simulator and optimizer verify/adjust the actual shot: <https://github.com/SeanMemery/cuetip>.
+- The training environment below uses a Python parity port of Chernika's current `PoolPhysics.java` and `PlatoTableCalibration.java`, rather than training only on a different idealized table. No source code is copied from those research repositories.
+
+## Current training task
+
+- One cue ball and one target ball; six measured Plato pockets.
+- Table playable bounds: `(120,169)-(490,895)` in the canonical 611x1024 screenshot.
+- Ball radius prior: `11.5 px`.
+- Pocket centers and openings are copied from the current Chernika calibration anchors.
+- Physics coefficients match the current `rebuild/table-simulator-gameplay` branch: ball restitution `0.946`, rail restitution `0.815`, rolling resistance `0.0095`, max cue speed `0.66 m/s`, max power reading `97.8%`.
+- Observation: 16 normalized values — cue position, target position, and six pocket centers.
+- Action: 2 continuous values — angle offset relative to the cue-to-target line, and power.
+- Reward: target pocketing dominates; legal first contact is rewarded; scratches and off-table events are heavily penalized; a small distance-progress term helps learning.
+- Every episode is one shot. This is a deliberately narrow skill-learning stage, not a full 9-ball policy.
+
+**Calibration warning:** the Java physics constants are still provisional and based on a small number of Plato replays. The Python port is intended to stay in parity with the current Java model; it is not a claim that the model perfectly reproduces all live-game physics. Spin, throw, masse, ball-in-hand, combinations and multi-rail effects are not included in Phase 1.
+
+## Install
+
+Python 3.10+ is required. On Windows PowerShell:
+
+```powershell
+cd training
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+On Linux/macOS:
+
+```bash
+cd training
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+## Verify the physics port
+
+```bash
+pytest -q
+```
+
+## Train the first agent
+
+```bash
+python -m chernika_rl.train --timesteps 100000 --device auto
+```
+
+The best checkpoint is saved under `artifacts/sac_single_ball/best_model/`; the final checkpoint and training metadata are saved beside it. TensorBoard logs are under `artifacts/sac_single_ball/tensorboard/`.
+
+For a quick smoke run:
+
+```bash
+python -m chernika_rl.train --timesteps 2000 --eval-freq 500 --eval-episodes 20
+```
+
+## Benchmark
+
+```bash
+python -m chernika_rl.evaluate --episodes 200
+```
+
+The benchmark runs the random policy, a ghost-ball + physics-scored heuristic, and SAC if a trained checkpoint exists. Each policy is tested against the same seeded table states. It reports pocket rate, first-contact rate, scratch rate, off-table rate, mean reward and mean power.
+
+## Transfer plan — do not skip the gate
+
+1. **Phase 1:** one-ball aiming and power control (this folder).
+2. **Phase 2:** add distractor balls and enforce lowest-ball first contact; train on multi-ball states.
+3. **Phase 3:** add cue-ball positioning, safety play, scratch avoidance, and combinations.
+4. **Phase 4:** compare raw LLM proposals with the trained policy. Use the LLM for high-level target/pocket/shot intent; let the simulator optimize and reject unsafe angle/power values. CueTip is the reference for this separation.
+5. **Phase 5:** export the small policy to ONNX/TFLite only after held-out evaluation, then connect it to the Android gesture adapter.
+
+The APK must remain on its existing geometric/physics planner until the learned policy beats the heuristic on a held-out benchmark and passes real-device replay validation. No untrained model should fire live Plato shots.
+
+## License and attribution
+
+This training scaffold is new Chernika code. Billiards-RL and CueTip are cited as design references; check their current repository licenses and attribution terms before incorporating any of their code or assets. CueTip currently declares MIT; the Billiards-RL repository currently has no license file visible in its repository root, so this project does not copy its source.
