@@ -9,7 +9,7 @@ from .physics import (
     Ball, POCKETS, BALL_RADIUS_PX, TABLE_LEFT, TABLE_TOP, TABLE_RIGHT,
     TABLE_BOTTOM, TABLE_WIDTH_PX, TABLE_WIDTH_METERS, TABLE_LENGTH_METERS,
     ROLLING_RESISTANCE, GRAVITY, MAX_CUE_SPEED_MPS, MAX_UI_POWER_PERCENT,
-    SimulationResult, simulate, wrap_angle,
+    BREAK_CUE_SPEED_MULTIPLIER, SimulationResult, simulate, wrap_angle,
 )
 from .nine_ball_rules import NineBallAssessment, assess_nine_ball_shot
 
@@ -109,19 +109,59 @@ def plan_nine_ball_shot(
             raise ValueError("pocket_indices cannot be used for a break shot")
         if legal_ball != 1:
             return None
-        angle_offsets = (-0.04, -0.02, 0.0, 0.02, 0.04)
+        # Direct-to-apex fallbacks plus explicit second-row target lines.
+        # The latter are the recorded Plato break strategy: clip #1 first,
+        # then transfer energy into one of the two adjacent rack balls.
+        angle_candidates: list[tuple[float, bool]] = [
+            (direct + offset * math.pi, False)
+            for offset in (-0.04, -0.02, 0.0, 0.02, 0.04)
+        ]
+        second_row = []
+        for ball in balls:
+            if ball.number == legal_ball:
+                continue
+            dx = ball.x - target.x
+            dy = ball.y - target.y
+            distance = math.hypot(dx, dy)
+            diameter = target.radius + ball.radius
+            if (
+                dy < -0.5 * target.radius
+                and 0.85 * diameter <= distance <= 1.15 * diameter
+                and abs(dx) >= 0.25 * target.radius
+            ):
+                second_row.append(ball)
+
+        for second_ball in sorted(second_row, key=lambda item: item.x):
+            aim_angle = math.atan2(
+                second_ball.y - cue.y, second_ball.x - cue.x
+            )
+            for delta in (-0.02, -0.01, 0.0, 0.01, 0.02):
+                angle_candidates.append((aim_angle + delta, True))
+
         powers = (70.0, 80.0, 90.0, MAX_UI_POWER_PERCENT)
-        for offset in angle_offsets:
-            action_angle = offset * math.pi
+        seen_offsets: set[float] = set()
+        for candidate_angle, second_ball_line in angle_candidates:
+            action_angle = wrap_angle(candidate_angle - direct)
+            key = round(action_angle, 6)
+            if key in seen_offsets:
+                continue
+            seen_offsets.add(key)
             for power in powers:
                 action = _power_action(action_angle, power)
-                result = simulate([cue, *balls], direct + action_angle, power)
+                result = simulate(
+                    [cue, *balls],
+                    direct + action_angle,
+                    power,
+                    cue_speed_multiplier=BREAK_CUE_SPEED_MULTIPLIER,
+                )
                 assessment = assess_nine_ball_shot(result, legal_ball, True)
                 score = _score_legal_result(
                     result, assessment, legal_ball, before_distance, True
                 )
                 if score < 0.0:
                     continue
+                if second_ball_line:
+                    score += 0.5
                 candidates.append(NineBallPlan(
                     action, legal_ball, -1, score, result, assessment, True
                 ))
