@@ -72,6 +72,34 @@ python -m chernika_rl.evaluate --episodes 200
 
 The benchmark runs the random policy, a ghost-ball + physics-scored heuristic, and SAC if a trained checkpoint exists. Each policy is tested against the same seeded table states. It reports pocket rate, first-contact rate, scratch rate, off-table rate, mean reward and mean power.
 
+## Raw LLM benchmark (optional, billable API calls)
+
+The raw-model test is deliberately separate from SAC. Each model receives the same structured coordinates, returns one angle offset and one power value, and gets **no simulator feedback or retry**. This isolates shot reasoning from screenshot perception. Install the optional adapter with `pip install -e ".[llm]"`.
+
+Examples (use the provider's API key as an environment variable; never commit keys):
+
+```bash
+# OpenAI
+export OPENAI_API_KEY=...
+python -m chernika_rl.llm_benchmark --provider openai --model gpt-6-astra --episodes 20 --seed 20000
+
+# Anthropic
+export ANTHROPIC_API_KEY=...
+python -m chernika_rl.llm_benchmark --provider anthropic --model claude-opus-5-5 --episodes 20 --seed 20000
+
+# DeepSeek
+export DEEPSEEK_API_KEY=...
+python -m chernika_rl.llm_benchmark --provider deepseek --model deepseek-v4-pro --episodes 20 --seed 20000
+
+# Alibaba Cloud Model Studio / Qwen
+export DASHSCOPE_API_KEY=...
+python -m chernika_rl.llm_benchmark --provider dashscope --model qwen3.7-plus --episodes 20 --seed 20000
+```
+
+Current candidate IDs are provider-controlled and can change: OpenAI `gpt-6-astra` / `gpt-6.1-sol` / `gpt-6.1-terra`; Anthropic `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-fable-5-2`; DeepSeek `deepseek-v4-pro` / `deepseek-flash`; Qwen `qwen3.7-plus` / `qwen3.8-max` / `qwen3.8-flash`. Verify account access and current IDs before running.
+
+For a fair comparison, run every model with the **same `--seed` and `--episodes`**. The first test uses numeric state only; a separate image-input test can later measure visual table-reading without mixing it into aiming accuracy.
+
 ## Transfer plan — do not skip the gate
 
 1. **Phase 1:** one-ball aiming and power control (this folder).
