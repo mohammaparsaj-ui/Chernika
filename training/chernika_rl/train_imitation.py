@@ -10,6 +10,9 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from .imitation import ImitationPolicy, POCKET_COUNT
+from .physics import (
+    POCKETS, TABLE_LEFT, TABLE_TOP, TABLE_WIDTH_PX, TABLE_HEIGHT_PX,
+)
 
 
 def _split_indices(
@@ -44,6 +47,96 @@ def _split_indices(
     return train_ids, validation_ids, "random_sample"
 
 
+
+def augment_nine_ball_symmetries(
+    observations: np.ndarray,
+    actions: np.ndarray,
+    pockets: np.ndarray,
+    successes: np.ndarray,
+    first_contacts: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Apply horizontal, vertical and 180-degree table symmetries to 52-value states.
+
+    Pocket coordinates are reset to the canonical measured anchors after each
+    transform. Missing-ball sentinels remain unchanged, and mirrored angle
+    offsets change sign while power remains unchanged.
+    """
+    observations = np.asarray(observations, dtype=np.float32)
+    actions = np.asarray(actions, dtype=np.float32)
+    pockets = np.asarray(pockets, dtype=np.int64)
+    successes = np.asarray(successes, dtype=np.float32)
+    first_contacts = np.asarray(first_contacts, dtype=np.float32)
+    count = len(observations)
+    if observations.ndim != 2 or observations.shape[1] != 52:
+        raise ValueError("nine-ball symmetry augmentation requires 52-value observations")
+    if actions.shape != (count, 2):
+        raise ValueError("actions must have shape (N, 2)")
+    for values, name in (
+        (pockets, "pockets"),
+        (successes, "successes"),
+        (first_contacts, "first_contacts"),
+    ):
+        if values.shape != (count,):
+            raise ValueError(f"{name} must have one value per observation")
+    if np.any(pockets < 0) or np.any(pockets >= POCKET_COUNT):
+        raise ValueError("Pocket labels must be integers in [0, 5]")
+
+    horizontal_map = np.asarray((1, 0, 3, 2, 5, 4), dtype=np.int64)
+    vertical_map = np.asarray((4, 5, 2, 3, 0, 1), dtype=np.int64)
+    rotate_map = np.asarray((5, 4, 3, 2, 1, 0), dtype=np.int64)
+    pocket_x = np.asarray(
+        [(p.x - TABLE_LEFT) / TABLE_WIDTH_PX for p in POCKETS],
+        dtype=np.float32,
+    )
+    pocket_y = np.asarray(
+        [(p.y - TABLE_TOP) / TABLE_HEIGHT_PX for p in POCKETS],
+        dtype=np.float32,
+    )
+
+    transformed_observations = [observations.copy()]
+    transformed_actions = [actions.copy()]
+    transformed_pockets = [pockets.copy()]
+
+    for flip_x, flip_y, pocket_map in (
+        (True, False, horizontal_map),
+        (False, True, vertical_map),
+        (True, True, rotate_map),
+    ):
+        state = observations.copy()
+        if flip_x:
+            state[:, 0] = 1.0 - state[:, 0]
+        if flip_y:
+            state[:, 1] = 1.0 - state[:, 1]
+
+        for ball_index in range(9):
+            base = 2 + 3 * ball_index
+            present = state[:, base + 2] > 0.5
+            if flip_x:
+                state[present, base] = 1.0 - state[present, base]
+            if flip_y:
+                state[present, base + 1] = 1.0 - state[present, base + 1]
+
+        for pocket_index in range(6):
+            state[:, 38 + 2 * pocket_index] = pocket_x[pocket_index]
+            state[:, 39 + 2 * pocket_index] = pocket_y[pocket_index]
+
+        action = actions.copy()
+        if flip_x != flip_y:
+            action[:, 0] *= -1.0
+
+        transformed_observations.append(state)
+        transformed_actions.append(action)
+        transformed_pockets.append(pocket_map[pockets])
+
+    return (
+        np.concatenate(transformed_observations, axis=0),
+        np.concatenate(transformed_actions, axis=0),
+        np.concatenate(transformed_pockets, axis=0),
+        np.tile(successes, 4),
+        np.tile(first_contacts, 4),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="artifacts/teacher_dataset.npz")
@@ -52,6 +145,11 @@ def main():
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--output", default="artifacts/imitation_policy.pt")
     parser.add_argument("--min-demonstrations", type=int, default=100)
+    parser.add_argument(
+        "--symmetry-augmentation",
+        action="store_true",
+        help="augment 52-value nine-ball states with horizontal/vertical table symmetries",
+    )
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -83,13 +181,37 @@ def main():
     train_ids, validation_ids, split_strategy = _split_indices(
         len(observations), args.seed, groups
     )
-    x = torch.from_numpy(observations)
-    y_action = torch.from_numpy(actions)
-    y_pocket = torch.from_numpy(pockets)
-    weights = torch.from_numpy(1.0 + 2.0 * successes + 0.5 * first_contacts)
+    train_observations = observations[train_ids]
+    train_actions = actions[train_ids]
+    train_pockets = pockets[train_ids]
+    train_successes = successes[train_ids]
+    train_first_contacts = first_contacts[train_ids]
+    if args.symmetry_augmentation:
+        (
+            train_observations,
+            train_actions,
+            train_pockets,
+            train_successes,
+            train_first_contacts,
+        ) = augment_nine_ball_symmetries(
+            train_observations,
+            train_actions,
+            train_pockets,
+            train_successes,
+            train_first_contacts,
+        )
+    x_train = torch.from_numpy(train_observations)
+    y_action_train = torch.from_numpy(train_actions)
+    y_pocket_train = torch.from_numpy(train_pockets)
+    weights_train = torch.from_numpy(
+        1.0 + 2.0 * train_successes + 0.5 * train_first_contacts
+    )
+    x_validation = torch.from_numpy(observations[validation_ids])
+    y_action_validation = torch.from_numpy(actions[validation_ids])
+    y_pocket_validation = torch.from_numpy(pockets[validation_ids])
 
     train_ds = TensorDataset(
-        x[train_ids], y_action[train_ids], y_pocket[train_ids], weights[train_ids]
+        x_train, y_action_train, y_pocket_train, weights_train
     )
     loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
 
@@ -125,21 +247,21 @@ def main():
 
         model.eval()
         with torch.no_grad():
-            validation_output = model(x[validation_ids])
+            validation_output = model(x_validation)
             val_pocket_loss = classification_loss(
-                validation_output[:, :POCKET_COUNT], y_pocket[validation_ids]
+                validation_output[:, :POCKET_COUNT], y_pocket_validation
             )
             val_action_loss = (
-                (validation_output[:, POCKET_COUNT:] - y_action[validation_ids]) ** 2
+                (validation_output[:, POCKET_COUNT:] - y_action_validation) ** 2
             ).mean()
             val_loss = float((val_pocket_loss + 2.0 * val_action_loss).item())
             pocket_accuracy = float(
                 (validation_output[:, :POCKET_COUNT].argmax(dim=1)
-                 == y_pocket[validation_ids]).float().mean().item()
+                 == y_pocket_validation).float().mean().item()
             )
             action_mae = float(
                 (validation_output[:, POCKET_COUNT:]
-                 - y_action[validation_ids]).abs().mean().item()
+                 - y_action_validation).abs().mean().item()
             )
 
         history.append({
@@ -169,6 +291,8 @@ def main():
         "metadata": {
             "algorithm": "behavioral-cloning",
             "demonstrations": int(len(observations)),
+            "training_examples_after_augmentation": int(len(train_observations)),
+            "symmetry_augmentation": bool(args.symmetry_augmentation),
             "epochs": args.epochs,
             "seed": args.seed,
             "split_strategy": split_strategy,
@@ -192,6 +316,8 @@ def main():
     )
     print(json.dumps({
         "demonstrations": len(observations),
+        "training_examples_after_augmentation": len(train_observations),
+        "symmetry_augmentation": bool(args.symmetry_augmentation),
         "split_strategy": split_strategy,
         "best_validation_loss": best_validation,
         "best_validation_pocket_accuracy": max(
