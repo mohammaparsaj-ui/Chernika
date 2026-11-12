@@ -1,4 +1,4 @@
-"""Evaluate teacher imitation on held-out states against teacher and random."""
+"""Evaluate raw imitation and hybrid pocket+physics policies on held-out states."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,7 @@ import numpy as np
 
 from .env import ChernikaSingleBallEnv
 from .imitation import load_policy, predict
-from .teacher import plan_teacher_shot
+from .teacher import plan_teacher_shot, plan_teacher_shot_for_pocket
 
 
 def _metrics(rows: list[dict]) -> dict:
@@ -35,8 +35,9 @@ def main():
     policy = load_policy(args.model)
     env = ChernikaSingleBallEnv()
     rng = np.random.default_rng(args.seed + 991)
-    rows = {"random": [], "teacher": [], "imitation": []}
+    rows = {"random": [], "teacher": [], "imitation": [], "hybrid": []}
     pocket_matches, action_errors, pocket_comparisons = 0, [], 0
+    hybrid_fallbacks = 0
 
     for index in range(args.episodes):
         state_seed = args.seed + index
@@ -52,10 +53,22 @@ def main():
             pocket_matches += int(predicted_pocket == plan.pocket_index)
             action_errors.append(float(np.abs(imitation_action - plan.action).mean()))
 
+        # Hybrid control: the network supplies strategic pocket selection;
+        # deterministic physics supplies exact ghost-ball angle and power.
+        hybrid_plan = plan_teacher_shot_for_pocket(
+            env.cue, env.target, predicted_pocket
+        )
+        if hybrid_plan is None:
+            hybrid_action = imitation_action
+            hybrid_fallbacks += 1
+        else:
+            hybrid_action = hybrid_plan.action
+
         actions = {
             "random": rng.uniform(-1.0, 1.0, size=2).astype(np.float32),
             "teacher": teacher_action,
             "imitation": imitation_action,
+            "hybrid": hybrid_action,
         }
         for name, action in actions.items():
             env.reset(seed=state_seed)
@@ -70,7 +83,7 @@ def main():
             })
 
     report = {
-        "benchmark": "Chernika teacher-guided imitation, held-out single-ball states",
+        "benchmark": "Chernika teacher-guided imitation and hybrid control, held-out single-ball states",
         "seed_start": args.seed,
         "results": {name: _metrics(values) for name, values in rows.items()},
         "teacher_agreement": {
@@ -78,8 +91,12 @@ def main():
             "action_mae": float(np.mean(action_errors)) if action_errors else None,
             "states_with_teacher_plan": pocket_comparisons,
         },
+        "hybrid": {
+            "controller": "neural pocket classification + ghost-ball geometry + physics power sweep",
+            "fallback_count": hybrid_fallbacks,
+        },
         "model": str(args.model),
-        "note": "Same seeded states for all policies. This remains an offline simulator benchmark.",
+        "note": "Same seeded states for all policies. This remains an offline simulator benchmark; no Android controls are connected.",
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
