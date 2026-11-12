@@ -254,3 +254,27 @@ def test_cue_ball_may_touch_an_object_ball_during_ball_in_hand():
     assert env.is_legal_cue_position(
         one.x, touching_y, behind_head_string=False
     )
+
+
+
+def test_break_ball_placement_is_restricted_to_behind_head_string():
+    env = ChernikaNineBallEnv()
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    one = Ball(300.0, 350.0, 1)
+    nine = Ball(420.0, 350.0, 9)
+    env.reset(
+        seed=11,
+        options={"cue": cue, "balls": [one, nine], "break_pending": False},
+    )
+    env.prepare_ball_in_hand()
+
+    assert env.is_legal_cue_position(
+        300.0, HEAD_STRING_Y + 30.0, behind_head_string=True
+    )
+    assert not env.is_legal_cue_position(
+        300.0, HEAD_STRING_Y - 30.0, behind_head_string=True
+    )
+    observation = env.place_cue_ball(
+        300.0, HEAD_STRING_Y + 30.0, behind_head_string=True
+    )
+    assert observation.shape == (OBSERVATION_SIZE,)

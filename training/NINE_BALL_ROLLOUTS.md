@@ -80,7 +80,7 @@ Remaining limitations: only one-cushion banks and kicks are enumerated; multi-ra
 
 The complete-rack evaluator now uses a match-mode shot environment. After any foul, the incoming player receives ball-in-hand anywhere on the cloth. The cue ball is removed from its old position, and a deterministic placement search scores a small set of legal cloth-grid and direct-pot ghost-ball positions with the incoming player's controller before selecting the best placement.
 
-If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three consecutive fouls by one player lose the rack. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
+If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three ordinary fouls do not automatically lose the game in Plato 9-ball. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
 
 The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
 
@@ -105,3 +105,10 @@ The match engine follows the project's observed Plato 9-ball rulebook rather tha
 - Three ordinary shot fouls do not automatically lose the rack.
 
 The head-string coordinate is currently a provisional one-quarter-table estimate because the exact white-line pixel position has not yet been measured from the Plato screenshot. It must be calibrated before live break-foul placement is considered pixel-exact.
+
+
+### Break and ball-in-hand validation
+
+Break legality is now assessed independently from the ordinary lowest-first rule: any first object-ball contact is permitted on the break, but missing every object ball is an illegal break. The no-pot break minimum is three distinct object balls making four total object-ball cushion contacts; cue-ball cushion contacts do not count. Ordinary no-pot shots accept a cue-ball rail contact even if it occurs before first object-ball contact.
+
+Plato's observed break branches are handled separately from ordinary ball-in-hand: illegal no-pot breaks rerack and pass the break; break scratches use behind-head-string placement; non-9 balls pocketed on a foul stay down; and a fouled 9 is respotted at the original #1 apex. The head-string pixel coordinate remains provisional pending direct measurement of the white line.

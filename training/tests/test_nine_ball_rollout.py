@@ -30,7 +30,6 @@ def test_rack_summary_reports_win_and_break_metrics():
             "mid_rack_fouls": 0,
             "ball_in_hand_placements": 0,
             "nine_respots": 0,
-            "three_foul_loss": False,
             "status": "win",
             "foul": False,
             "shots": 8,
@@ -47,7 +46,6 @@ def test_rack_summary_reports_win_and_break_metrics():
             "mid_rack_fouls": 0,
             "ball_in_hand_placements": 1,
             "nine_respots": 0,
-            "three_foul_loss": False,
             "status": "break_foul",
             "foul": True,
             "shots": 1,
@@ -92,12 +90,31 @@ def test_ball_in_hand_search_returns_a_legal_position():
 
 
 
-def test_three_ordinary_fouls_are_not_a_automatic_rack_loss_in_plato_rules():
-    # The match controller counts fouls but does not apply WPA's three-foul loss.
-    result = run_rack(
-        20261113,
-        strategy="teacher_greedy",
-        max_shots=1,
-    )
-    assert "three_foul_loss" not in result
-    assert "consecutive_fouls_by_player" not in result
+
+
+
+def test_rack_summary_reports_plato_break_rerack_metrics():
+    rows = [
+        {
+            "winner": 0,
+            "break_legal": True,
+            "break_foul": True,
+            "reracks": 1,
+            "total_fouls": 1,
+            "mid_rack_fouls": 0,
+            "ball_in_hand_placements": 0,
+            "nine_respots": 0,
+            "status": "win",
+            "foul": True,
+            "shots": 4,
+            "total_pocketed_balls": 9,
+            "break_spread": 5,
+            "break_attempts": 2,
+            "neural_fallback_count": 0,
+        },
+    ]
+    metrics = summarize_racks(rows)
+
+    assert metrics["rerack_rate"] == 1.0
+    assert metrics["mean_break_attempts"] == 2.0
+    assert "three_foul_loss_rate" not in metrics
