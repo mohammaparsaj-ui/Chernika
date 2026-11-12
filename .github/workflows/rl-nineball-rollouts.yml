@@ -25,7 +25,9 @@ concurrency:
 jobs:
   nineball-rollouts:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The 60-rack, depth-2 teacher rollout generator alone used ~38 minutes
+    # in the previous run; the full pipeline needs room for training/evaluation.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
