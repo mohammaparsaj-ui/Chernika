@@ -327,6 +327,66 @@ def _safety_score(
     return score
 
 
+
+def _evaluate_kick_safety(
+    cue: Ball,
+    balls: list[Ball],
+    legal_ball: int,
+    rail: str,
+) -> NineBallPlan | None:
+    """Try a one-cushion cue-ball kick to the lowest ball without potting."""
+    target = next(ball for ball in balls if ball.number == legal_ball)
+    mirrored_cue = _reflect_point(cue.x, cue.y, rail)
+    dx, dy = target.x - mirrored_cue[0], target.y - mirrored_cue[1]
+    distance = math.hypot(dx, dy)
+    if distance <= 2.0 * BALL_RADIUS_PX + 1.0:
+        return None
+
+    ux, uy = dx / distance, dy / distance
+    ghost = (
+        target.x - ux * (2.0 * BALL_RADIUS_PX + 1.0),
+        target.y - uy * (2.0 * BALL_RADIUS_PX + 1.0),
+    )
+    if _rail_intersection(mirrored_cue, ghost, rail) is None:
+        return None
+
+    unfolded_angle = math.atan2(
+        ghost[1] - mirrored_cue[1],
+        ghost[0] - mirrored_cue[0],
+    )
+    vx, vy = math.cos(unfolded_angle), math.sin(unfolded_angle)
+    if rail in ("left", "right"):
+        vx = -vx
+    else:
+        vy = -vy
+    shot_angle = math.atan2(vy, vx)
+    direct_angle = math.atan2(target.y - cue.y, target.x - cue.x)
+    angle_offset = wrap_angle(shot_angle - direct_angle)
+
+    best: NineBallPlan | None = None
+    for power in (35.0, 55.0, 75.0, 90.0, MAX_UI_POWER_PERCENT):
+        result = simulate([cue, *balls], shot_angle, power)
+        assessment = assess_nine_ball_shot(result, legal_ball, False)
+        if not assessment.legal_shot:
+            continue
+        score = _safety_score(result, legal_ball, balls)
+        if score is None:
+            continue
+        candidate = NineBallPlan(
+            _power_action(angle_offset, power),
+            legal_ball,
+            -1,
+            score - 2.5,
+            result,
+            assessment,
+            False,
+            "safety_kick",
+        )
+        if best is None or candidate.score > best.score:
+            best = candidate
+    return best
+
+
 def _plan_safety_shot(
     cue: Ball,
     balls: list[Ball],
@@ -369,6 +429,15 @@ def _plan_safety_shot(
             )
             if best is None or candidate.score > best.score:
                 best = candidate
+    # If the direct path is blocked, unfold a one-cushion cue-ball route to
+    # the lowest ball. The shared simulator validates first contact, post-contact
+    # rail contact, scratches, off-table balls and accidental pots.
+    for rail in ("left", "right", "top", "bottom"):
+        candidate = _evaluate_kick_safety(cue, balls, legal_ball, rail)
+        if candidate is not None and (
+            best is None or candidate.score > best.score
+        ):
+            best = candidate
     return best
 
 def plan_nine_ball_shot(
