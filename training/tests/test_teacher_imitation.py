@@ -72,18 +72,41 @@ def test_pocket_conditioned_physics_planner_rejects_invalid_index():
 def test_predict_top_pockets_returns_ranked_unique_candidates():
     policy = ImitationPolicy()
     observation = np.zeros(16, dtype=np.float32)
-    action, pockets = predict_top_pockets(policy, observation, top_k=2)
+    action, pockets = predict_top_pockets(policy, observation, top_k=6)
     assert action.shape == (2,)
-    assert len(pockets) == 2
-    assert len(set(pockets)) == 2
-    assert all(0 <= pocket < 6 for pocket in pockets)
+    assert len(pockets) == 6
+    assert len(set(pockets)) == 6
+    assert set(pockets) == set(range(6))
 
 
 def test_predict_top_pockets_rejects_invalid_top_k():
     policy = ImitationPolicy()
     try:
-        predict_top_pockets(policy, np.zeros(16, dtype=np.float32), top_k=0)
+        predict_top_pockets(policy, np.zeros(16, dtype=np.float32), top_k=7)
     except ValueError:
         pass
     else:
-        raise AssertionError("top_k=0 must raise ValueError")
+        raise AssertionError("top_k=7 must raise ValueError")
+
+
+
+def test_top_six_pocket_planner_matches_global_teacher_score():
+    env = ChernikaSingleBallEnv()
+    for seed in (20261115, 20261116, 20261117):
+        env.reset(seed=seed)
+        assert env.cue is not None and env.target is not None
+        teacher = plan_teacher_shot(env.cue, env.target)
+        candidates = [
+            plan_teacher_shot_for_pocket(env.cue, env.target, pocket_index)
+            for pocket_index in range(6)
+        ]
+        candidates = [candidate for candidate in candidates if candidate is not None]
+        if teacher is None:
+            assert not candidates
+        else:
+            assert candidates
+            assert np.isclose(
+                max(candidate.score for candidate in candidates),
+                teacher.score,
+                atol=1e-6,
+            )
