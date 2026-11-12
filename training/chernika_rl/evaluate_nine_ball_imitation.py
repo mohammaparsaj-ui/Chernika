@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import numpy as np
 
-from .env import ChernikaNineBallEnv
+from .nine_ball_env import ChernikaNineBallEnv
 from .imitation import load_policy, predict_top_pockets
 from .nine_ball_data import sample_random_state
 from .nine_ball_teacher import plan_nine_ball_shot
