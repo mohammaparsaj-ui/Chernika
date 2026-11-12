@@ -36,6 +36,10 @@ MIN_COLLISION_SPEED_PER_RADIUS = 0.08
 # Dense racks create simultaneous contacts. Revisit the pairs so collision
 # propagation does not depend on the arbitrary ball-number iteration order.
 BALL_COLLISION_ITERATIONS = 4
+# Provisional break-only scale: 0.66 m/s was fitted to ordinary shots, while
+# earlier Plato replay estimates reached about 2.67 m/s at maximum power.
+# Keep normal shots unchanged and refine this against the original break clip.
+BREAK_CUE_SPEED_MULTIPLIER = 4.0
 
 @dataclass(frozen=True)
 class Pocket:
