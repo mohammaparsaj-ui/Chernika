@@ -85,6 +85,8 @@ class SimulationResult:
     simulated_seconds: float
     cue_scratch: bool
     any_ball_off_table: bool
+    post_contact_cushion_contacts: int = 0
+    post_contact_cushion_ball_numbers: tuple[int, ...] = ()
 
     def pocketed(self, number: int) -> bool:
         return any(o.number == number and not o.cue and o.pocketed for o in self.outcomes)
@@ -218,6 +220,8 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
     collision_speed = max(0.25, cue.radius * MIN_COLLISION_SPEED_PER_RADIUS)
     first_contact: int | None = None
     collisions = cushion_contacts = 0
+    post_contact_cushion_contacts = 0
+    post_contact_cushion_ball_numbers: set[int] = set()
     elapsed = 0.0
     max_steps = math.ceil(MAX_SIM_SECONDS / DT)
 
@@ -274,7 +278,12 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
                 body.pocketed = True
                 body.vx = body.vy = 0.0
                 continue
-            cushion_contacts += _resolve_rails(body)
+            rail_contacts = _resolve_rails(body)
+            cushion_contacts += rail_contacts
+            if first_contact is not None and rail_contacts > 0:
+                post_contact_cushion_contacts += rail_contacts
+                if not body.source.cue:
+                    post_contact_cushion_ball_numbers.add(body.source.number)
             if not body.active():
                 continue
             if (body.x < TABLE_LEFT - body.radius or body.x > TABLE_RIGHT + body.radius
@@ -299,8 +308,12 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
                                  b.pocketed, b.off_table) for b in bodies)
     cue_scratch = any(o.cue and o.pocketed for o in outcomes)
     any_off_table = any(o.off_table for o in outcomes)
-    return SimulationResult(outcomes, first_contact, collisions, cushion_contacts,
-                            elapsed, cue_scratch, any_off_table)
+    return SimulationResult(
+        outcomes, first_contact, collisions, cushion_contacts,
+        elapsed, cue_scratch, any_off_table,
+        post_contact_cushion_contacts,
+        tuple(sorted(post_contact_cushion_ball_numbers)),
+    )
 
 
 def wrap_angle(angle: float) -> float:
