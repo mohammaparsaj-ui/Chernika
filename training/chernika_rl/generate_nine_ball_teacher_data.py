@@ -16,6 +16,8 @@ def generate(states: int, seed: int) -> dict[str, np.ndarray | dict]:
     observations, actions, pockets = [], [], []
     scores, successes, first_contacts = [], [], []
     skipped = 0
+    safety_actions = 0
+    legal_plans = 0
 
     for index in range(states):
         state_seed = seed + index
@@ -26,6 +28,11 @@ def generate(states: int, seed: int) -> dict[str, np.ndarray | dict]:
         )
         plan = plan_nine_ball_shot(cue, balls, break_shot=False)
         if plan is None:
+            skipped += 1
+            continue
+        legal_plans += 1
+        if plan.shot_type == "safety":
+            safety_actions += 1
             skipped += 1
             continue
 
@@ -51,8 +58,11 @@ def generate(states: int, seed: int) -> dict[str, np.ndarray | dict]:
             "usable_demonstrations": len(observations),
             "skipped_states": skipped,
             "seed_start": seed,
-            "teacher_legal_plan_rate": len(observations) / max(1, states),
-            "teacher_pot_rate": float(np.mean(successes)),
+            "teacher_legal_plan_rate": legal_plans / max(1, states),
+            "teacher_pot_demonstration_rate": len(observations) / max(1, states),
+            "teacher_pot_rate": len(observations) / max(1, legal_plans),
+            "pot_success_rate_on_labeled_samples": float(np.mean(successes)),
+            "safety_actions_excluded_from_pocket_imitation": safety_actions,
             "teacher_first_contact_rate": float(np.mean(first_contacts)),
             "observation_size": 52,
             "state_distribution": (

@@ -1,5 +1,9 @@
 import math
+from types import SimpleNamespace
 
+import numpy as np
+
+import chernika_rl.generate_nine_ball_teacher_data as teacher_data
 import chernika_rl.nine_ball_planner as planner
 import chernika_rl.nine_ball_teacher as teacher
 from chernika_rl.physics import (
@@ -125,3 +129,34 @@ def test_two_ply_planner_can_fall_back_to_safety(monkeypatch):
     assert result is not None
     assert result.plan.shot_type == "safety"
     assert result.planned_pockets == ()
+
+
+
+def test_random_state_imitation_data_excludes_safety_pocket_label(monkeypatch):
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    balls = [Ball(300.0, 300.0, 1), Ball(350.0, 500.0, 2), Ball(400.0, 400.0, 9)]
+    monkeypatch.setattr(
+        teacher_data, "sample_random_state", lambda seed: (cue, balls)
+    )
+    calls = {"count": 0}
+
+    def fake_plan(*args, **kwargs):
+        calls["count"] += 1
+        safety = calls["count"] == 1
+        return SimpleNamespace(
+            shot_type="safety" if safety else "direct",
+            action=np.asarray([0.0, 0.0], dtype=np.float32),
+            pocket_index=-1 if safety else 5,
+            score=30.0,
+            legal_ball=1,
+            assessment=SimpleNamespace(pocketed_numbers=() if safety else (1,)),
+            result=SimpleNamespace(first_contact_number=1),
+        )
+
+    monkeypatch.setattr(teacher_data, "plan_nine_ball_shot", fake_plan)
+    dataset = teacher_data.generate(states=2, seed=123)
+
+    assert dataset["pockets"].tolist() == [5]
+    assert dataset["metadata"]["safety_actions_excluded_from_pocket_imitation"] == 1
+    assert dataset["metadata"]["teacher_legal_plan_rate"] == 1.0
+    assert dataset["metadata"]["teacher_pot_demonstration_rate"] == 0.5
