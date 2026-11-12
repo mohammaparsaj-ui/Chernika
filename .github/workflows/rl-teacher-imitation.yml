@@ -3,7 +3,15 @@ name: Chernika teacher-guided imitation training
 on:
   pull_request:
     paths:
-      - 'training/**'
+      - 'training/chernika_rl/env.py'
+      - 'training/chernika_rl/physics.py'
+      - 'training/chernika_rl/teacher.py'
+      - 'training/chernika_rl/generate_teacher_data.py'
+      - 'training/chernika_rl/evaluate_imitation.py'
+      - 'training/tests/test_env.py'
+      - 'training/tests/test_physics.py'
+      - 'training/tests/test_teacher_imitation.py'
+      - 'training/pyproject.toml'
       - '.github/workflows/rl-teacher-imitation.yml'
   workflow_dispatch:
 

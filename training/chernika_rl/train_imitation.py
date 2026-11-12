@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--output", default="artifacts/imitation_policy.pt")
+    parser.add_argument("--min-demonstrations", type=int, default=100)
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -32,10 +33,17 @@ def main():
     successes = data["successes"].astype(np.float32)
     first_contacts = data["first_contacts"].astype(np.float32)
 
-    if len(observations) < 100:
-        raise ValueError(f"Need at least 100 demonstrations, got {len(observations)}")
-    if observations.shape[1] != 16 or actions.shape[1] != 2:
-        raise ValueError("Unexpected observation/action dimensions")
+    if len(observations) < args.min_demonstrations:
+        raise ValueError(
+            f"Need at least {args.min_demonstrations} demonstrations, got {len(observations)}"
+        )
+    if (
+        observations.ndim != 2
+        or observations.shape[1] not in (16, 52)
+        or actions.ndim != 2
+        or actions.shape[1] != 2
+    ):
+        raise ValueError("Expected 16- or 52-value observations and 2-value actions")
     if np.any(pockets < 0) or np.any(pockets >= POCKET_COUNT):
         raise ValueError("Pocket labels must be integers in [0, 5]")
 
@@ -55,7 +63,10 @@ def main():
                              y_pocket[train_ids], weights[train_ids])
     loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
 
-    model = ImitationPolicy(hidden_size=128)
+    model = ImitationPolicy(
+        hidden_size=128,
+        observation_size=int(observations.shape[1]),
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=8e-4, weight_decay=1e-4)
     classification_loss = nn.CrossEntropyLoss()
     best_validation = float("inf")
@@ -121,6 +132,7 @@ def main():
     torch.save({
         "state_dict": model.state_dict(),
         "hidden_size": 128,
+        "observation_size": int(observations.shape[1]),
         "metadata": {
             "algorithm": "behavioral-cloning",
             "demonstrations": int(len(observations)),

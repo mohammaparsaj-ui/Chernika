@@ -71,3 +71,22 @@ The test suite covers:
 ## Next gate
 
 Build and validate a multi-ball teacher against legal first-contact, pocketing and foul rules; generate post-break states; train a separate 52-input policy; then compare it with a physics baseline on held-out full-table states. Only after Python/Java golden-shot agreement and real Plato replay validation should any learned controller be considered for Android integration.
+
+
+## Multi-ball teacher training prototype
+
+The 52-input policy is separate from the Phase 1 single-ball checkpoint. The current teacher samples direct ghost-ball paths from the lowest numbered ball to the six measured pockets, simulates the cue plus all active object balls, and rejects any candidate that violates the shared 9-ball rules. A pocket-restricted mode supports neural top-k ranking followed by full-table physics verification.
+
+Generate randomized stationary training states (3–9 object balls, with the 9 present):
+
+    python -m chernika_rl.generate_nine_ball_teacher_data --states 700 --seed 70000
+
+Train a separate 52-input behavioral-cloning model:
+
+    python -m chernika_rl.train_imitation --data artifacts/nine_ball_teacher_dataset.npz --epochs 80 --min-demonstrations 50 --output artifacts/nine_ball_policy.pt
+
+Evaluate random, teacher, raw imitation and neural top-3 + physics hybrid policies on held-out randomized states:
+
+    python -m chernika_rl.evaluate_nine_ball_imitation --model artifacts/nine_ball_policy.pt --episodes 150 --seed 80000
+
+The random state distribution is a controlled first experiment, not a reconstruction of post-break gameplay. A later dataset must be generated from validated break simulations and real Plato replays before live integration.

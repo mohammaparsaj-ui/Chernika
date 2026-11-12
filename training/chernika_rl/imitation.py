@@ -6,16 +6,24 @@ import numpy as np
 import torch
 from torch import nn
 
-OBSERVATION_SIZE = 16
+DEFAULT_OBSERVATION_SIZE = 16
+OBSERVATION_SIZE = DEFAULT_OBSERVATION_SIZE
 POCKET_COUNT = 6
 
 
 class ImitationPolicy(nn.Module):
     """Shared MLP with a pocket-selection head and continuous shot head."""
-    def __init__(self, hidden_size: int = 128):
+    def __init__(
+        self,
+        hidden_size: int = 128,
+        observation_size: int = DEFAULT_OBSERVATION_SIZE,
+    ):
         super().__init__()
+        if observation_size < 1:
+            raise ValueError("observation_size must be positive")
+        self.observation_size = int(observation_size)
         self.backbone = nn.Sequential(
-            nn.Linear(OBSERVATION_SIZE, hidden_size),
+            nn.Linear(self.observation_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -32,7 +40,12 @@ class ImitationPolicy(nn.Module):
 
 def load_policy(path: str | Path, device: str = "cpu") -> ImitationPolicy:
     checkpoint = torch.load(Path(path), map_location=device, weights_only=True)
-    policy = ImitationPolicy(hidden_size=int(checkpoint.get("hidden_size", 128)))
+    policy = ImitationPolicy(
+        hidden_size=int(checkpoint.get("hidden_size", 128)),
+        observation_size=int(
+            checkpoint.get("observation_size", DEFAULT_OBSERVATION_SIZE)
+        ),
+    )
     policy.load_state_dict(checkpoint["state_dict"])
     policy.to(device)
     policy.eval()

@@ -1,0 +1,57 @@
+name: Chernika nine-ball imitation training
+
+on:
+  pull_request:
+    paths:
+      - 'training/chernika_rl/nine_ball_*.py'
+      - 'training/chernika_rl/nine_ball_data.py'
+      - 'training/chernika_rl/imitation.py'
+      - 'training/chernika_rl/train_imitation.py'
+      - 'training/tests/test_nine_ball_*.py'
+      - 'training/pyproject.toml'
+      - '.github/workflows/rl-nineball-imitation.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: chernika-nineball-imitation-pr
+  cancel-in-progress: true
+
+jobs:
+  nineball-imitation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: training/pyproject.toml
+      - name: Install training package
+        run: python -m pip install -e 'training[dev]'
+      - name: Run unit tests
+        run: pytest -q training/tests
+      - name: Generate 700 multi-ball teacher demonstrations
+        working-directory: training
+        run: |
+          python -m chernika_rl.generate_nine_ball_teacher_data --states 700 --seed 70000 --output artifacts/nine_ball_teacher_dataset.npz
+      - name: Train 52-input nine-ball policy
+        working-directory: training
+        run: |
+          python -m chernika_rl.train_imitation --data artifacts/nine_ball_teacher_dataset.npz --epochs 80 --batch-size 128 --seed 321 --min-demonstrations 50 --output artifacts/nine_ball_policy.pt
+      - name: Evaluate on 150 held-out multi-ball states
+        working-directory: training
+        run: |
+          python -m chernika_rl.evaluate_nine_ball_imitation --model artifacts/nine_ball_policy.pt --episodes 150 --seed 80000 --output artifacts/nine_ball_evaluation.json
+      - name: Upload nine-ball dataset, model and evaluation
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernika-nineball-imitation
+          path: |
+            training/artifacts/nine_ball_teacher_dataset.npz
+            training/artifacts/nine_ball_teacher_dataset.json
+            training/artifacts/nine_ball_policy.pt
+            training/artifacts/nine_ball_policy.metrics.json
+            training/artifacts/nine_ball_evaluation.json
+          if-no-files-found: error
+          retention-days: 30
