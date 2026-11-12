@@ -16,6 +16,8 @@ def test_single_shot_limit_produces_a_bounded_rack_trajectory():
     assert len(result["trajectory"]) <= 1
     if result["trajectory"]:
         assert result["trajectory"][0]["break"] is True
+        assert len(result["trajectory"][0]["observation"]) == 52
+        assert len(result["trajectory"][0]["action"]) == 2
 
 
 def test_rack_summary_reports_win_and_break_metrics():
