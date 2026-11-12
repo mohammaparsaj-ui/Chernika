@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-from litellm import completion
 
 from .env import ChernikaSingleBallEnv
 from .physics import (
@@ -110,6 +109,9 @@ def _usage_value(usage, name: str) -> int:
 
 
 def _call_model(model_name: str, kwargs: dict, prompt: str, timeout: int):
+    # Keep LiteLLM optional so physics and parser tests do not require API extras.
+    from litellm import completion
+
     started = time.perf_counter()
     response = completion(
         model=model_name,
@@ -151,7 +153,7 @@ def main():
     env = ChernikaSingleBallEnv()
     rows = []
     for i in range(args.episodes):
-        _, _ = env.reset(seed=args.seed + i)
+        env.reset(seed=args.seed + i)
         prompt = _state_prompt(env)
         started = time.perf_counter()
         try:
