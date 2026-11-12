@@ -202,8 +202,16 @@ def _resolve_rails(body: _Body) -> int:
     return contacts
 
 
-def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) -> SimulationResult:
-    """Simulate one shot. angle_radians is the absolute screen-space direction."""
+def simulate(
+    balls: Iterable[Ball],
+    angle_radians: float,
+    power_percent: float,
+    *,
+    cue_speed_multiplier: float = 1.0,
+) -> SimulationResult:
+    """Simulate one shot; multiplier is an explicit calibration hook for break tests."""
+    if not math.isfinite(cue_speed_multiplier) or cue_speed_multiplier <= 0.0:
+        raise ValueError("cue_speed_multiplier must be finite and positive")
     sources = list(balls)
     cue_index = next((i for i, b in enumerate(sources) if b.cue), None)
     if cue_index is None or not math.isfinite(angle_radians):
@@ -214,7 +222,10 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
     power = max(0.0, min(100.0, float(power_percent)))
     normalized_power = min(1.0, power / MAX_UI_POWER_PERCENT)
     pixels_per_meter = _pixels_per_meter()
-    speed = normalized_power * MAX_CUE_SPEED_MPS * pixels_per_meter
+    speed = (
+        normalized_power * MAX_CUE_SPEED_MPS
+        * float(cue_speed_multiplier) * pixels_per_meter
+    )
     cue.vx = math.cos(angle_radians) * speed
     cue.vy = math.sin(angle_radians) * speed
 
