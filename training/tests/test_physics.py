@@ -82,3 +82,13 @@ def test_aligned_bottom_right_pot_is_detected():
     assert result.first_contact_number == 4
     assert result.pocketed(4)
     assert not result.cue_scratch
+
+
+
+def test_post_contact_cushion_events_track_distinct_object_balls():
+    cue = Ball(300.0, 350.0, 0, cue=True)
+    target = Ball(300.0, 250.0, 1)
+    result = simulate([cue, target], -math.pi / 2.0, 70.0)
+    assert result.first_contact_number == 1
+    assert result.post_contact_cushion_contacts >= 1
+    assert 1 in result.post_contact_cushion_ball_numbers
