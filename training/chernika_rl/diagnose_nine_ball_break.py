@@ -55,7 +55,10 @@ def diagnose_canonical_reference() -> dict:
                 angle = aim_angle + delta
                 action_offset = float((angle - direct + np.pi) % (2.0 * np.pi) - np.pi)
                 for power in powers:
-                    result = simulate([cue, *rack], angle, power)
+                    result = simulate(
+                        [cue, *sorted(rack, key=lambda ball: ball.number)],
+                        angle, power,
+                    )
                     assessment = assess_nine_ball_shot(
                         result, 1, break_shot=True
                     )
@@ -144,7 +147,7 @@ def diagnose(
         rack_seed = seed + index
         _, _ = env.reset(seed=rack_seed)
         cue = env.cue
-        balls = list(env.object_balls.values())
+        balls = sorted(env.object_balls.values(), key=lambda ball: ball.number)
         if cue is None or 1 not in env.object_balls:
             raise RuntimeError("seeded rack is missing cue ball or ball 1")
         target = env.object_balls[1]
