@@ -34,6 +34,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Set up Gradle 9.8.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
       - name: Configure Android SDK
         run: |
           set -euo pipefail
@@ -43,9 +47,7 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;36.0.0" "platform-tools"
       - name: Verify Gradle
-        run: |
-          gradle --version
-          gradle --version | grep -q 'Gradle 9.8.2'
+        run: gradle --version
       - name: Compile Java and run Android unit tests
         run: |
           gradle :app:testDebugUnitTest :app:compileDebugJavaWithJavac --no-daemon --stacktrace
