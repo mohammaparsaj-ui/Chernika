@@ -39,12 +39,35 @@ def load_policy(path: str | Path, device: str = "cpu") -> ImitationPolicy:
     return policy
 
 
-def predict(policy: ImitationPolicy, observation: np.ndarray,
-            device: str = "cpu") -> tuple[np.ndarray, int]:
-    values = torch.as_tensor(np.asarray(observation, dtype=np.float32),
-                             dtype=torch.float32, device=device).reshape(1, -1)
+def predict_top_pockets(
+    policy: ImitationPolicy,
+    observation: np.ndarray,
+    top_k: int = 2,
+    device: str = "cpu",
+) -> tuple[np.ndarray, list[int]]:
+    """Return the continuous action and ranked pocket candidates."""
+    if not 1 <= top_k <= POCKET_COUNT:
+        raise ValueError(f"top_k must be in [1, {POCKET_COUNT}]")
+    values = torch.as_tensor(
+        np.asarray(observation, dtype=np.float32),
+        dtype=torch.float32,
+        device=device,
+    ).reshape(1, -1)
     with torch.no_grad():
         output = policy(values)[0]
-    pocket_index = int(torch.argmax(output[:POCKET_COUNT]).item())
+    pocket_indices = torch.topk(output[:POCKET_COUNT], k=top_k).indices
     action = output[POCKET_COUNT:].cpu().numpy().astype(np.float32)
-    return np.clip(action, -1.0, 1.0), pocket_index
+    return np.clip(action, -1.0, 1.0), [
+        int(index) for index in pocket_indices.cpu().tolist()
+    ]
+
+
+def predict(
+    policy: ImitationPolicy,
+    observation: np.ndarray,
+    device: str = "cpu",
+) -> tuple[np.ndarray, int]:
+    action, pockets = predict_top_pockets(
+        policy, observation, top_k=1, device=device
+    )
+    return action, pockets[0]
