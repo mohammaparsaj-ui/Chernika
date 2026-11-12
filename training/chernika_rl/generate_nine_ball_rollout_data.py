@@ -82,6 +82,8 @@ def generate(
             if shot_type.startswith("safety"):
                 safety_actions += 1
                 continue
+            if not shot.get("legal", False):
+                continue
 
             pocket_index = int(shot.get("pocket_index", -1))
             state = shot.get("observation")
