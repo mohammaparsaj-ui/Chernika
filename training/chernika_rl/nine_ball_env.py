@@ -357,7 +357,13 @@ class ChernikaNineBallEnv(gym.Env):
         self.shot_count += 1
 
         reward = -0.05
-        if simulation.first_contact_number == legal_ball:
+        if (
+            (break_before and simulation.first_contact_number is not None)
+            or (
+                not break_before
+                and simulation.first_contact_number == legal_ball
+            )
+        ):
             reward += 0.50
         if legal_shot:
             reward += 1.0 * len(pocketed_numbers)

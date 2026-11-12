@@ -47,7 +47,7 @@ The report includes rack win rate, legal-break rate, break spread, foul rate, no
 
 ## Interpretation and limitations
 
-A rack win means the 9 is legally pocketed by the single practice agent. It is not a match win against an opponent. A foul ends the current practice rollout; opponent turns, ball-in-hand, 9-ball respotting after fouls and tactical safety exchanges are not yet simulated.
+A rack win means the 9 is legally pocketed by the candidate player against the configured physics-teacher opponent. The complete-rack controller simulates opponent turns, ordinary ball-in-hand, Plato's break-specific rerack and behind-head-string branches, and 9-ball respotting. The head-string coordinate is provisional pending exact measurement of the white line.
 
 The lookahead is depth two, not a complete game-tree search. The planner enumerates direct pots, one-cushion object-ball banks, one-cushion cue-ball kicks and a legal safety fallback. Multi-cushion routes and deliberate combination-shot families are not yet explicit. Spin, throw, masse, detailed pocket-jaw behavior and cloth anisotropy remain unmodelled.
 
@@ -80,11 +80,11 @@ Remaining limitations: only one-cushion banks and kicks are enumerated; multi-ra
 
 The complete-rack evaluator now uses a match-mode shot environment. After any foul, the incoming player receives ball-in-hand anywhere on the cloth. The cue ball is removed from its old position, and a deterministic placement search scores a small set of legal cloth-grid and direct-pot ghost-ball positions with the incoming player's controller before selecting the best placement.
 
-If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three ordinary fouls do not automatically lose the game in Plato 9-ball. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
+If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three ordinary fouls do not automatically lose the game in Plato 9-ball. These transitions follow the project's observed Plato 9-ball rulebook; three ordinary fouls do not automatically end the rack.
 
 The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
 
-Still outstanding: push-out decisions, the optional three-ball break rule, stalemate re-racks, full opponent strength diversity, multi-rail bank/kick search, spin/throw and live Plato replay validation.
+Still outstanding: exact head-string pixel calibration, push-out decisions, stalemate re-racks, full opponent strength diversity, multi-rail bank/kick search, spin/throw and live Plato replay validation.
 
 
 ### One-cushion kick safety fallback
@@ -94,7 +94,7 @@ When direct safety contacts are blocked, the teacher now unfolds the cue-ball pa
 
 ## Plato-specific rule corrections
 
-The match engine follows the project's observed Plato 9-ball rulebook rather than generic WPA defaults:
+The match engine follows the project's observed Plato 9-ball rulebook:
 
 - A break may contact any object ball first; missing every object ball is an illegal break.
 - A no-pot break requires at least three distinct object balls to make at least four total object-ball cushion contacts. Cue-ball rail contacts do not count toward this break requirement.

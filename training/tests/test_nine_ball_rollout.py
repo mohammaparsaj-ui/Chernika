@@ -118,3 +118,67 @@ def test_rack_summary_reports_plato_break_rerack_metrics():
     assert metrics["rerack_rate"] == 1.0
     assert metrics["mean_break_attempts"] == 2.0
     assert "three_foul_loss_rate" not in metrics
+
+
+
+def test_illegal_no_pot_break_reracks_and_passes_break_to_opponent(monkeypatch):
+    from types import SimpleNamespace
+    import numpy as np
+    import chernika_rl.nine_ball_rollout as rollout
+
+    plan = SimpleNamespace(
+        action=np.asarray([0.0, 0.0], dtype=np.float32),
+        shot_type="break",
+        score=1.0,
+    )
+    monkeypatch.setattr(rollout, "plan_nine_ball_shot", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(rollout, "_choose_plan", lambda *args, **kwargs: (None, {}))
+
+    def fake_step(env, action):
+        env.shot_count += 1
+        env.break_pending = False
+        if env.shot_count == 1:
+            env.cue = None
+            legal = False
+            foul = True
+            first_contact = None
+            break_met = False
+            foul_reason = "no_object_ball_contact"
+        else:
+            legal = True
+            foul = False
+            first_contact = 2
+            break_met = True
+            foul_reason = None
+        info = {
+            "shot_count": env.shot_count,
+            "legal_ball": 1,
+            "first_contact": first_contact,
+            "pocketed_numbers": [],
+            "remaining_balls": sorted(env.object_balls),
+            "legal_shot": legal,
+            "foul": foul,
+            "foul_reason": foul_reason,
+            "break_requirement_met": break_met,
+            "post_contact_cushion_ball_numbers": [1, 2, 3] if break_met else [],
+            "post_contact_object_ball_cushion_contacts": 4 if break_met else 0,
+            "power_percent": 60.0,
+            "win": False,
+        }
+        return env._last_obs.copy(), -1.0, False, False, info
+
+    monkeypatch.setattr(rollout.ChernikaNineBallEnv, "step", fake_step)
+
+    result = rollout.run_rack(
+        20261114,
+        strategy="teacher_greedy",
+        max_shots=3,
+    )
+
+    assert result["break_attempts"] == 2
+    assert result["reracks"] == 1
+    assert result["break_foul"] is True
+    assert result["break_legal"] is True
+    assert [shot["player"] for shot in result["trajectory"]] == [0, 1]
+    assert result["trajectory"][0]["reracked"] is True
+    assert result["trajectory"][0]["next_breaker"] == 1
