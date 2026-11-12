@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from .nine_ball_env import ChernikaNineBallEnv
+from .physics import BREAK_CUE_SPEED_MULTIPLIER
 from .nine_ball_teacher import plan_nine_ball_shot
 
 
@@ -46,6 +47,8 @@ def generate(racks: int, seed: int) -> dict[str, np.ndarray | dict]:
         "usable_demonstrations": len(observations),
         "skipped_racks": skipped,
         "seed_start": seed,
+        "break_cue_speed_multiplier": BREAK_CUE_SPEED_MULTIPLIER,
+        "break_aim_strategy": "second-row target with legal first contact on ball 1",
         "legal_teacher_break_rate": legal_breaks / racks,
         "mean_distinct_object_balls_to_rail": float(np.mean(spreads)),
         "break_pocket_rate": float(np.mean(np.asarray(pocket_counts) > 0)),
