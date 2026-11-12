@@ -425,8 +425,8 @@ public class ChernikaAccessibilityService extends AccessibilityService {
             setStatus("Scratch detected, but a clear potting route already exists. Keeping the cue ball in place.");
             return;
         }
-        Vec2 placement = planner.bestCuePlacement(frame,
-                announcement.legalBall, announcement.objectiveBall);
+        Vec2 placement = planner.bestCuePlacement(
+                frame, announcement.legalBall, announcement.objectiveBall, shotsSinceRack);
         if (placement == null
                 || placement.distance(frame.cueBall.center) < frame.cueBall.radius * 1.5) {
             setStatus("Scratch detected. No safe cue-ball placement found; waiting.");
