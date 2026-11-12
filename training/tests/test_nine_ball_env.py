@@ -104,19 +104,22 @@ def test_legal_pot_removes_ball_and_advances_lowest_target():
     assert truncated is False
 
 
-def test_max_shots_truncates_nonterminal_practice_episode():
+def test_max_shots_truncates_a_legal_nonterminal_episode():
     env = ChernikaNineBallEnv(max_shots=1)
-    cue = Ball(300.0, 700.0, 0, cue=True)
-    one = Ball(300.0, 650.0, 1)
-    nine = Ball(450.0, 300.0, 9)
+    cue = Ball(300.0, 300.0, 0, cue=True)
+    one = Ball(300.0, 220.0, 1)
+    nine = Ball(450.0, 500.0, 9)
     env.reset(
         seed=4,
         options={"cue": cue, "balls": [one, nine], "break_pending": False},
     )
 
-    _, _, terminated, truncated, _ = env.step(
-        np.array([0.0, -0.5], dtype=np.float32)
+    _, _, terminated, truncated, info = env.step(
+        np.array([0.0, 0.0], dtype=np.float32)
     )
 
-    assert terminated is True  # the controlled short shot is a foul
-    assert truncated is False
+    assert info["first_contact"] == 1
+    assert info["legal_shot"] is True
+    assert info["pocketed_numbers"] == []
+    assert terminated is False
+    assert truncated is True
