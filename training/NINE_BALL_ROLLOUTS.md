@@ -80,7 +80,7 @@ Remaining limitations: only one-cushion banks and kicks are enumerated; multi-ra
 
 The complete-rack evaluator now uses a match-mode shot environment. After any foul, the incoming player receives ball-in-hand anywhere on the cloth. The cue ball is removed from its old position, and a deterministic placement search scores a small set of legal cloth-grid and direct-pot ghost-ball positions with the incoming player's controller before selecting the best placement.
 
-If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three ordinary fouls do not automatically lose the game in Plato 9-ball. These transitions follow the project's observed Plato 9-ball rulebook; three ordinary fouls do not automatically end the rack.
+If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the simulator chooses the nearest non-overlapping open position around the original #1 apex; other object balls are not respotted. Three ordinary fouls do not automatically lose the game in Plato 9-ball.
 
 The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
 

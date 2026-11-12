@@ -28,15 +28,15 @@ HEAD_STRING_Y = TABLE_BOTTOM - TABLE_HEIGHT_PX * 0.25
 # Slot order and orientation match DiamondRackVisionDetector:
 # 1 / 2 / 3 / 2 / 1, with the #1 apex closest to the cue ball.
 RACK_SLOTS = (
-    (0.0, -40.0),
-    (-12.0, -20.0),
-    (12.0, -20.0),
-    (-23.0, 0.0),
+    (0.0, -2.0 * SQRT_THREE),
+    (-1.0, -SQRT_THREE),
+    (1.0, -SQRT_THREE),
+    (-2.0, 0.0),
     (0.0, 0.0),
-    (23.0, 0.0),
-    (-12.0, 20.0),
-    (12.0, 20.0),
-    (0.0, 40.0),
+    (2.0, 0.0),
+    (-1.0, SQRT_THREE),
+    (1.0, SQRT_THREE),
+    (0.0, 2.0 * SQRT_THREE),
 )
 
 

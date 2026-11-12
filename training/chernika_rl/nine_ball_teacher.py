@@ -479,8 +479,8 @@ def plan_nine_ball_shot(
         if legal_ball != 1:
             return None
         # Direct-to-apex fallbacks plus explicit second-row target lines.
-        # The latter are the recorded Plato break strategy: clip #1 first,
-        # then transfer energy into one of the two adjacent rack balls.
+        # The latter follow the recorded Plato break aim. Plato's break rule
+        # permits any first object-ball contact, not only the lowest ball.
         angle_candidates: list[tuple[float, bool]] = [
             (direct + offset * math.pi, False)
             for offset in (-0.02, 0.0, 0.02)
