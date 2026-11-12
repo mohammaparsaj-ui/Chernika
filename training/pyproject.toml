@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+llm = ["litellm>=1.70"]
 
 [tool.setuptools.packages.find]
 include = ["chernika_rl*"]
