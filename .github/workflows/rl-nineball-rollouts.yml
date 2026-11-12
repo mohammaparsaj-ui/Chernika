@@ -44,7 +44,7 @@ jobs:
       - name: Generate 400 break demonstrations
         working-directory: training
         run: |
-          python -m chernika_rl.generate_nine_ball_break_data --racks 400 --seed 91000 --output artifacts/nine_ball_break_dataset.npz
+          python -m chernika_rl.generate_nine_ball_break_data --racks 250 --seed 91000 --output artifacts/nine_ball_break_dataset.npz
       - name: Train dedicated break policy
         working-directory: training
         run: |
