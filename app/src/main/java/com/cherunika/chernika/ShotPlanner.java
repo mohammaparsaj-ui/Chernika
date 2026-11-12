@@ -78,7 +78,7 @@ final class ShotPlanner {
         return rankWithPhysics(frame, candidates, legalBall, objectiveBall);
     }
 
-    private int[] preferredPocketIndices(FrameState frame, int legalBall,
+    int[] preferredPocketIndices(FrameState frame, int legalBall,
                                          int objectiveBall, int shotCount) {
         if (imitationPolicy == null || frame == null || frame.table == null
                 || (objectiveBall == 9 && legalBall != 9)) {
@@ -213,9 +213,14 @@ final class ShotPlanner {
     }
 
     Vec2 bestCuePlacement(FrameState frame, int legalBall, int objectiveBall) {
+        return bestCuePlacement(frame, legalBall, objectiveBall, 0);
+    }
+
+    Vec2 bestCuePlacement(FrameState frame, int legalBall,
+                          int objectiveBall, int shotCount) {
         if (frame == null || frame.table == null || frame.cueBall == null) return null;
         Ball oldCue = frame.cueBall;
-        if (plan(frame, legalBall, objectiveBall) != null) return oldCue.center;
+        if (plan(frame, legalBall, objectiveBall, shotCount) != null) return oldCue.center;
 
         double r = oldCue.radius;
         double[][] points = {
@@ -230,7 +235,7 @@ final class ShotPlanner {
             if (!frame.table.contains(candidate, r * 2.2)) continue;
             if (overlapsBall(candidate, r, frame.balls, oldCue)) continue;
             frame.cueBall = new Ball(candidate, r, 0, true);
-            ShotPlan candidatePlan = plan(frame, legalBall, objectiveBall);
+            ShotPlan candidatePlan = plan(frame, legalBall, objectiveBall, shotCount);
             if (candidatePlan != null && candidatePlan.score < bestScore) {
                 bestScore = candidatePlan.score;
                 best = candidate;
