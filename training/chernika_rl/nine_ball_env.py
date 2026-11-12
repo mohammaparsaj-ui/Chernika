@@ -9,7 +9,7 @@ from gymnasium import spaces
 from .physics import (
     Ball, POCKETS, BALL_RADIUS_PX, TABLE_LEFT, TABLE_TOP, TABLE_RIGHT,
     TABLE_BOTTOM, TABLE_WIDTH_PX, TABLE_HEIGHT_PX, MAX_UI_POWER_PERCENT,
-    simulate,
+    BREAK_CUE_SPEED_MULTIPLIER, simulate,
 )
 from .nine_ball_rules import assess_nine_ball_shot
 
@@ -190,6 +190,9 @@ class ChernikaNineBallEnv(gym.Env):
             [original_cue, *[original_balls[n] for n in sorted(original_balls)]],
             angle,
             power,
+            cue_speed_multiplier=(
+                BREAK_CUE_SPEED_MULTIPLIER if break_before else 1.0
+            ),
         )
 
         assessment = assess_nine_ball_shot(simulation, legal_ball, break_before)
