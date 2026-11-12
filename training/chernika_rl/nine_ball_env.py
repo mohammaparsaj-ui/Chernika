@@ -11,6 +11,7 @@ from .physics import (
     TABLE_BOTTOM, TABLE_WIDTH_PX, TABLE_HEIGHT_PX, MAX_UI_POWER_PERCENT,
     simulate,
 )
+from .nine_ball_rules import assess_nine_ball_shot
 
 OBSERVATION_SIZE = 52
 MAX_SHOTS_DEFAULT = 24
@@ -191,10 +192,8 @@ class ChernikaNineBallEnv(gym.Env):
             power,
         )
 
-        pocketed_numbers = sorted(
-            outcome.number for outcome in simulation.outcomes
-            if not outcome.cue and outcome.pocketed
-        )
+        assessment = assess_nine_ball_shot(simulation, legal_ball, break_before)
+        pocketed_numbers = list(assessment.pocketed_numbers)
         remaining: dict[int, Ball] = {}
         for outcome in simulation.outcomes:
             if outcome.cue or outcome.pocketed or outcome.off_table:
@@ -212,29 +211,9 @@ class ChernikaNineBallEnv(gym.Env):
                 radius=original_cue.radius,
             )
 
-        wrong_contact = simulation.first_contact_number != legal_ball
-        foul_reason = None
-        if simulation.cue_scratch:
-            foul_reason = "cue_scratch"
-        elif simulation.any_ball_off_table:
-            foul_reason = "ball_off_table"
-        elif wrong_contact:
-            foul_reason = (
-                "no_object_ball_contact" if simulation.first_contact_number is None
-                else "wrong_first_contact"
-            )
-        elif break_before:
-            # WPA-style break requirement: pocket an object ball or drive at
-            # least four distinct object balls to cushions after legal contact.
-            if not pocketed_numbers and len(
-                simulation.post_contact_cushion_ball_numbers
-            ) < 4:
-                foul_reason = "break_rail_requirement"
-        elif not pocketed_numbers and simulation.post_contact_cushion_contacts == 0:
-            foul_reason = "no_rail_after_contact"
-
-        legal_shot = foul_reason is None
-        won = legal_shot and 9 in pocketed_numbers
+        foul_reason = assessment.foul_reason
+        legal_shot = assessment.legal_shot
+        won = assessment.won
         self.break_pending = False
         self.shot_count += 1
 
