@@ -3,6 +3,7 @@ import torch
 
 from chernika_rl.env import ChernikaSingleBallEnv
 from chernika_rl.imitation import ImitationPolicy, predict
+from chernika_rl.physics import Ball, POCKETS, BALL_RADIUS_PX
 from chernika_rl.teacher import plan_teacher_shot, plan_teacher_shot_for_pocket
 
 
