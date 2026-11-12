@@ -55,6 +55,9 @@ def diagnose(
                     "pocketed_numbers": list(assessment.pocketed_numbers),
                     "spread": len(result.post_contact_cushion_ball_numbers),
                     "rail_ball_numbers": list(result.post_contact_cushion_ball_numbers),
+                    "ball_collisions": result.ball_collisions,
+                    "cushion_contacts": result.cushion_contacts,
+                    "simulated_seconds": result.simulated_seconds,
                     "scratch": result.cue_scratch,
                     "off_table": result.any_ball_off_table,
                 })
@@ -121,6 +124,14 @@ def diagnose(
         ),
         "max_best_valid_contact_spread": (
             max(row["spread"] for row in best_valid_rows)
+            if best_valid_rows else 0
+        ),
+        "mean_best_valid_contact_collisions": (
+            float(np.mean([row["ball_collisions"] for row in best_valid_rows]))
+            if best_valid_rows else 0.0
+        ),
+        "max_best_valid_contact_collisions": (
+            max(row["ball_collisions"] for row in best_valid_rows)
             if best_valid_rows else 0
         ),
         "best_valid_contact_spread_histogram": dict(sorted(spread_histogram.items())),
