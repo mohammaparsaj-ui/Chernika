@@ -15,6 +15,7 @@ from .nine_ball_rules import assess_nine_ball_shot, break_requirement_met
 
 OBSERVATION_SIZE = 52
 MAX_SHOTS_DEFAULT = 24
+SQRT_THREE = math.sqrt(3.0)
 # Frame-derived Plato rack coordinates from 1000323339.mp4 (611x1024).
 RACK_CENTER_X = 306.5
 RACK_CENTER_Y = 314.5

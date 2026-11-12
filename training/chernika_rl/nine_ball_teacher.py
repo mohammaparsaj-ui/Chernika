@@ -482,8 +482,8 @@ def plan_nine_ball_shot(
         # The latter follow the recorded Plato break aim. Plato's break rule
         # permits any first object-ball contact, not only the lowest ball.
         angle_candidates: list[tuple[float, bool]] = [
-            (direct + offset * math.pi, False)
-            for offset in (-0.02, 0.0, 0.02)
+            (direct + offset, False)
+            for offset in (-0.05, 0.0, 0.05)
         ]
         second_row = []
         for ball in balls:
@@ -504,7 +504,9 @@ def plan_nine_ball_shot(
             aim_angle = math.atan2(
                 second_ball.y - cue.y, second_ball.x - cue.x
             )
-            for delta in (-0.02, 0.0, 0.02):
+            # The recorded second-row break line varies by a few degrees
+            # with rack/cue placement; search a wider, deterministic fan.
+            for delta in (-0.15, -0.10, -0.05, 0.0, 0.05, 0.10, 0.15):
                 angle_candidates.append((aim_angle + delta, True))
 
         powers = (MAX_UI_POWER_PERCENT,)

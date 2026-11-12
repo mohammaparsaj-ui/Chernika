@@ -8,7 +8,7 @@ The rack is the calibrated 1-2-3-2-1 diamond. Ball 1 is the front apex, ball 9 i
 
 ## Break learning
 
-The break path uses a separate provisional cue-speed multiplier (4.0× the ordinary-shot calibration) and searches direct-apex plus both second-row aim lines. The multiplier is based on the upper end of earlier Plato trajectory estimates and is deliberately isolated from normal shots. It is not considered final calibration until the original break clip's cue start, aim line and settled positions are rechecked.
+The break path uses a separate provisional cue-speed multiplier (4.0× the ordinary-shot calibration) and searches direct-apex plus both second-row aim lines with a wider angle fan. The multiplier is based on the upper end of earlier Plato trajectory estimates and is deliberately isolated from normal shots. It is not considered final calibration until the original break clip's cue start, aim line and settled positions are rechecked.
 
 A separate 52-input regression policy learns the two normalized break controls (angle offset and power). It is deliberately separate from the six-pocket post-break policy so that break actions do not corrupt pocket-classification labels.
 
