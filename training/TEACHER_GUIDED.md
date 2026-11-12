@@ -14,16 +14,21 @@ The pipeline generated 3,929 usable demonstrations from 4,000 seeded states (71 
 
 The neural pocket classifier agreed with the teacher on 89.9% of states with a valid teacher plan. However, the raw angle/power regression did not reproduce successful shots. The raw student is not a playable policy and must not be deployed.
 
-## Hybrid control experiment
+## Hybrid control result
 
-The next experiment separates strategic selection from precise execution:
+The first hybrid benchmark used the neural network's top-ranked pocket, then deterministic ghost-ball geometry and a six-value physics power sweep.
 
-1. The neural network chooses one of the six measured pockets.
-2. A deterministic geometry controller computes the ghost-ball line for that selected pocket.
-3. The physics simulator sweeps candidate power values and selects the best outcome.
-4. The held-out benchmark compares random, teacher, raw imitation, and hybrid policies on identical seeded states.
+| Policy | Pocket rate |
+|---|---:|
+| Physics teacher | 28.0% |
+| Raw neural student | 2.33% |
+| Hybrid top-1 | 25.0% |
 
-This tests whether learned pocket selection can help without asking a neural network to regress a highly sensitive angle and power directly.
+The hybrid achieved a 99.33% first-contact rate and 0.67% scratch rate on the same 300 held-out states. It is only three percentage points behind the teacher, and far better than raw action regression.
+
+## Top-2 pocket search
+
+The next experiment asks the classifier for its two highest-ranked pockets, runs the physics shot controller for both, and selects the better simulated result. This tests whether a small increase in candidate search can recover cases where the top-1 pocket label is wrong.
 
 ## Run locally
 
