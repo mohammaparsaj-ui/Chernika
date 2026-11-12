@@ -8,6 +8,7 @@ import numpy as np
 
 from .nine_ball_break import load_break_policy, predict_break_action
 from .nine_ball_env import ChernikaNineBallEnv
+from .physics import BREAK_CUE_SPEED_MULTIPLIER
 from .nine_ball_teacher import plan_nine_ball_shot
 
 
@@ -77,6 +78,8 @@ def main():
     report = {
         "benchmark": "Chernika nine-ball break imitation, held-out diamond racks",
         "seed_start": args.seed,
+        "break_cue_speed_multiplier": BREAK_CUE_SPEED_MULTIPLIER,
+        "break_aim_strategy": "second-row target with legal first contact on ball 1",
         "requested_episodes": args.episodes,
         "evaluated_episodes": len(rows["physics_teacher"]),
         "racks_without_teacher_break": teacher_unavailable,
