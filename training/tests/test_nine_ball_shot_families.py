@@ -160,3 +160,21 @@ def test_random_state_imitation_data_excludes_safety_pocket_label(monkeypatch):
     assert dataset["metadata"]["safety_actions_excluded_from_pocket_imitation"] == 1
     assert dataset["metadata"]["teacher_legal_plan_rate"] == 1.0
     assert dataset["metadata"]["teacher_pot_demonstration_rate"] == 0.5
+
+
+
+def test_one_cushion_kick_safety_is_physics_verified(monkeypatch):
+    monkeypatch.setattr(teacher, "simulate", _safety_simulation)
+    cue = Ball(300.0, 450.0, 0, cue=True)
+    target = Ball(300.0, 300.0, 1)
+    balls = [target, Ball(350.0, 500.0, 2), Ball(420.0, 600.0, 9)]
+
+    candidate = teacher._evaluate_kick_safety(
+        cue, balls, 1, "left"
+    )
+
+    assert candidate is not None
+    assert candidate.shot_type == "safety_kick"
+    assert candidate.pocket_index == -1
+    assert candidate.assessment.legal_shot
+    assert candidate.assessment.pocketed_numbers == ()
