@@ -164,25 +164,30 @@ class ChernikaSingleBallEnv(gym.Env):
                 continue
             required_v = max(math.sqrt(max(0.0, 2.0 * decel * cue_dist)),
                              math.sqrt(max(0.0, 2.0 * decel * obj_dist)) / contact_cos)
-            power = min(MAX_UI_POWER_PERCENT, max(1.0,
+            base_power = min(MAX_UI_POWER_PERCENT, max(1.0,
                     required_v / max_speed * MAX_UI_POWER_PERCENT * 1.12))
-            action = np.array([delta / math.pi,
-                               2.0 * power / MAX_UI_POWER_PERCENT - 1.0], dtype=np.float32)
-            # Score the real simulated outcome rather than trusting geometry alone.
-            result = simulate([self.cue, self.target], direct + delta, power)
-            score = 100.0 if result.pocketed(self.target.number) else 0.0
-            if result.first_contact_number == self.target.number:
-                score += 2.0
-            if result.cue_scratch:
-                score -= 20.0
-            if result.any_ball_off_table:
-                score -= 10.0
-            if score == 0.0:
-                pos = result.final_position(self.target.number)
-                if pos is not None:
-                    score += max(-1.0, min(1.0,
-                        (obj_dist - _nearest_pocket_distance(*pos)) / TABLE_WIDTH_PX))
-            candidates.append((score, np.clip(action, -1.0, 1.0)))
+            # A small local power sweep is a stronger baseline than trusting
+            # one analytic speed estimate on provisional physics.
+            for multiplier in (0.75, 0.90, 1.00, 1.10, 1.25, 1.40):
+                power = min(MAX_UI_POWER_PERCENT, max(1.0, base_power * multiplier))
+                action = np.array([delta / math.pi,
+                                   2.0 * power / MAX_UI_POWER_PERCENT - 1.0], dtype=np.float32)
+                # Score the real simulated outcome rather than trusting geometry alone.
+                angle = direct + delta
+                result = simulate([self.cue, self.target], angle, power)
+                score = 100.0 if result.pocketed(self.target.number) else 0.0
+                if result.first_contact_number == self.target.number:
+                    score += 2.0
+                if result.cue_scratch:
+                    score -= 20.0
+                if result.any_ball_off_table:
+                    score -= 10.0
+                if score == 0.0:
+                    pos = result.final_position(self.target.number)
+                    if pos is not None:
+                        score += max(-1.0, min(1.0,
+                            (obj_dist - _nearest_pocket_distance(*pos)) / TABLE_WIDTH_PX))
+                candidates.append((score, np.clip(action, -1.0, 1.0)))
 
         if not candidates:
             return np.array([0.0, -0.2], dtype=np.float32)
