@@ -11,11 +11,21 @@ from .physics import (
     TABLE_BOTTOM, TABLE_WIDTH_PX, TABLE_HEIGHT_PX, MAX_UI_POWER_PERCENT,
     BREAK_CUE_SPEED_MULTIPLIER, simulate,
 )
-from .nine_ball_rules import assess_nine_ball_shot
+from .nine_ball_rules import assess_nine_ball_shot, break_requirement_met
 
 OBSERVATION_SIZE = 52
 MAX_SHOTS_DEFAULT = 24
 SQRT_THREE = math.sqrt(3.0)
+
+# Frame-derived Plato rack coordinates from 1000323339.mp4 (611x1024).
+RACK_CENTER_X = 306.5
+RACK_CENTER_Y = 314.5
+NINE_BALL_RESPOT_X = 306.5
+NINE_BALL_RESPOT_Y = 354.5  # original #1 apex position, not the #9 centre
+
+# Provisional head-string estimate: one quarter of the playable length from
+# the head rail. The exact white-line pixel coordinate has not been measured.
+HEAD_STRING_Y = TABLE_BOTTOM - TABLE_HEIGHT_PX * 0.25
 
 # Slot order and orientation match DiamondRackVisionDetector:
 # 1 / 2 / 3 / 2 / 1, with the #1 apex closest to the cue ball.
@@ -87,8 +97,8 @@ class ChernikaNineBallEnv(gym.Env):
         return min(self.object_balls) if self.object_balls else 0
 
     def _rack_balls(self) -> dict[int, Ball]:
-        center_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
-        center_y = TABLE_TOP + TABLE_HEIGHT_PX * 0.20
+        center_x = RACK_CENTER_X
+        center_y = RACK_CENTER_Y
         shuffled = list(range(2, 9))
         self.np_random.shuffle(shuffled)
         numbers = [0] * 9
@@ -108,16 +118,26 @@ class ChernikaNineBallEnv(gym.Env):
         return balls
 
 
-    def is_legal_cue_position(self, x: float, y: float) -> bool:
-        """Return whether a ball-in-hand placement is on-cloth and non-overlapping."""
+    def is_legal_cue_position(
+        self,
+        x: float,
+        y: float,
+        *,
+        behind_head_string: bool = False,
+    ) -> bool:
+        """Check on-cloth placement; touching an object ball is allowed."""
         radius = BALL_RADIUS_PX
         if not (
             TABLE_LEFT + radius <= x <= TABLE_RIGHT - radius
             and TABLE_TOP + radius <= y <= TABLE_BOTTOM - radius
         ):
             return False
+        if behind_head_string and y < HEAD_STRING_Y + 0.5:
+            return False
         for ball in self.object_balls.values():
-            minimum = radius + ball.radius + 0.5
+            # Plato permits the cue ball to touch an object ball; only overlap
+            # is prohibited. The small tolerance absorbs pixel rounding.
+            minimum = radius + ball.radius - 0.25
             if math.hypot(x - ball.x, y - ball.y) < minimum:
                 return False
         return True
@@ -127,21 +147,40 @@ class ChernikaNineBallEnv(gym.Env):
         self.cue = None
         self._last_obs = None
 
-    def place_cue_ball(self, x: float, y: float) -> np.ndarray:
+    def place_cue_ball(
+        self,
+        x: float,
+        y: float,
+        *,
+        behind_head_string: bool = False,
+    ) -> np.ndarray:
         """Place the cue ball legally and return the refreshed 52-value state."""
-        if not self.is_legal_cue_position(float(x), float(y)):
-            raise ValueError("cue-ball placement overlaps a ball or lies off the table")
+        if not self.is_legal_cue_position(
+            float(x), float(y), behind_head_string=behind_head_string
+        ):
+            region = "behind the head string" if behind_head_string else "on the table"
+            raise ValueError(f"cue-ball placement is not legal {region}")
         self.cue = Ball(float(x), float(y), 0, cue=True)
         self._last_obs = self._make_observation()
         return self._last_obs.copy()
 
+    def rerack_for_break(self) -> np.ndarray:
+        """Rebuild the diamond after an illegal no-pot break; keep shot count."""
+        self.object_balls = self._rack_balls()
+        center_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
+        cue_x = center_x + float(self.np_random.uniform(-20.0, 20.0))
+        cue_y = TABLE_BOTTOM - 100.0
+        self.cue = Ball(cue_x, cue_y, 0, cue=True)
+        self.break_pending = True
+        self._last_obs = self._make_observation()
+        return self._last_obs.copy()
+
     def respot_nine_ball(self) -> tuple[float, float] | None:
-        """Spot a missing 9-ball on the foot spot, searching toward the foot rail first."""
+        """Respot a missing 9 at Plato's original #1 apex position."""
         if 9 in self.object_balls:
             return None
 
-        foot_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
-        foot_y = TABLE_TOP + TABLE_HEIGHT_PX * 0.20
+        spot_x, spot_y = NINE_BALL_RESPOT_X, NINE_BALL_RESPOT_Y
         radius = BALL_RADIUS_PX
 
         def clear(x: float, y: float) -> bool:
@@ -151,35 +190,34 @@ class ChernikaNineBallEnv(gym.Env):
             ):
                 return False
             for ball in self.object_balls.values():
-                if math.hypot(x - ball.x, y - ball.y) < radius + ball.radius + 0.25:
+                if math.hypot(x - ball.x, y - ball.y) < radius + ball.radius - 0.25:
                     return False
             return True
 
-        # WPA spotting order: as close as possible to the foot spot, first
-        # between the foot spot and foot rail, then toward the head rail.
-        max_steps = int(TABLE_HEIGHT_PX)
-        chosen = None
-        for direction in (-1.0, 1.0):
-            for step in range(max_steps + 1):
-                y = foot_y + direction * step
-                if clear(foot_x, y):
-                    chosen = (foot_x, y)
-                    break
-            if chosen is not None:
-                break
-
-        # A highly unusual fully blocked long-string fallback: search the
-        # remaining cloth for the nearest clear point to the foot spot.
-        if chosen is None:
+        chosen: tuple[float, float] | None = None
+        if clear(spot_x, spot_y):
+            chosen = (spot_x, spot_y)
+        else:
+            # Plato places the 9 immediately beside the blocking ball, as
+            # close as possible to the original #1 spot. Search the whole
+            # playable cloth and choose the nearest non-overlapping pixel;
+            # do not force the respot onto the centre line.
             best_distance = float("inf")
-            for yi in range(int(TABLE_TOP + radius), int(TABLE_BOTTOM - radius) + 1, 4):
-                for xi in range(int(TABLE_LEFT + radius), int(TABLE_RIGHT - radius) + 1, 4):
-                    if not clear(float(xi), float(yi)):
+            for yi in range(
+                int(TABLE_TOP + radius),
+                int(TABLE_BOTTOM - radius) + 1,
+            ):
+                for xi in range(
+                    int(TABLE_LEFT + radius),
+                    int(TABLE_RIGHT - radius) + 1,
+                ):
+                    distance = math.hypot(xi - spot_x, yi - spot_y)
+                    if distance >= best_distance:
                         continue
-                    distance = math.hypot(xi - foot_x, yi - foot_y)
-                    if distance < best_distance:
+                    if clear(float(xi), float(yi)):
                         best_distance = distance
                         chosen = (float(xi), float(yi))
+
         if chosen is None:
             raise RuntimeError("no legal position is available to respot the 9-ball")
 
@@ -358,6 +396,15 @@ class ChernikaNineBallEnv(gym.Env):
             "post_contact_cushion_contacts": simulation.post_contact_cushion_contacts,
             "post_contact_cushion_ball_numbers": list(
                 simulation.post_contact_cushion_ball_numbers
+            ),
+            "post_contact_object_ball_cushion_contacts": (
+                simulation.post_contact_object_ball_cushion_contacts
+            ),
+            "cue_pre_contact_cushion_contacts": (
+                simulation.cue_pre_contact_cushion_contacts
+            ),
+            "break_requirement_met": (
+                break_requirement_met(simulation) if break_before else None
             ),
             "cue_scratch": simulation.cue_scratch,
             "off_table": simulation.any_ball_off_table,

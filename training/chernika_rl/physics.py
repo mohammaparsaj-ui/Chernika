@@ -94,6 +94,8 @@ class SimulationResult:
     any_ball_off_table: bool
     post_contact_cushion_contacts: int = 0
     post_contact_cushion_ball_numbers: tuple[int, ...] = ()
+    post_contact_object_ball_cushion_contacts: int = 0
+    cue_pre_contact_cushion_contacts: int = 0
 
     def pocketed(self, number: int) -> bool:
         return any(o.number == number and not o.cue and o.pocketed for o in self.outcomes)
@@ -239,6 +241,8 @@ def simulate(
     first_contact: int | None = None
     collisions = cushion_contacts = 0
     post_contact_cushion_contacts = 0
+    post_contact_object_ball_cushion_contacts = 0
+    cue_pre_contact_cushion_contacts = 0
     post_contact_cushion_ball_numbers: set[int] = set()
     elapsed = 0.0
     max_steps = math.ceil(MAX_SIM_SECONDS / DT)
@@ -301,10 +305,17 @@ def simulate(
                 continue
             rail_contacts = _resolve_rails(body)
             cushion_contacts += rail_contacts
-            if first_contact is not None and rail_contacts > 0:
-                post_contact_cushion_contacts += rail_contacts
-                if not body.source.cue:
-                    post_contact_cushion_ball_numbers.add(body.source.number)
+            if rail_contacts > 0:
+                if first_contact is None:
+                    # Plato accepts a cue-ball cushion contact even when it
+                    # happens before the first object-ball contact.
+                    if body.source.cue:
+                        cue_pre_contact_cushion_contacts += rail_contacts
+                else:
+                    post_contact_cushion_contacts += rail_contacts
+                    if not body.source.cue:
+                        post_contact_object_ball_cushion_contacts += rail_contacts
+                        post_contact_cushion_ball_numbers.add(body.source.number)
             if not body.active():
                 continue
             if (body.x < TABLE_LEFT - body.radius or body.x > TABLE_RIGHT + body.radius
@@ -334,6 +345,8 @@ def simulate(
         elapsed, cue_scratch, any_off_table,
         post_contact_cushion_contacts,
         tuple(sorted(post_contact_cushion_ball_numbers)),
+        post_contact_object_ball_cushion_contacts,
+        cue_pre_contact_cushion_contacts,
     )
 
 
