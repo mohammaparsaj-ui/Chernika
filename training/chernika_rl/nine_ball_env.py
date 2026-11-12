@@ -137,8 +137,7 @@ class ChernikaNineBallEnv(gym.Env):
     def respot_nine_ball(self) -> tuple[float, float] | None:
         """Spot a missing 9-ball on the foot spot, searching down-table first."""
         if 9 in self.object_balls:
-            ball = self.object_balls[9]
-            return (ball.x, ball.y)
+            return None
 
         foot_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
         foot_y = TABLE_TOP + TABLE_HEIGHT_PX * 0.20
