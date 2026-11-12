@@ -150,12 +150,15 @@ def main():
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--output", default="artifacts/imitation_policy.pt")
     parser.add_argument("--min-demonstrations", type=int, default=100)
+    parser.add_argument("--action-loss-weight", type=float, default=2.0)
     parser.add_argument(
         "--symmetry-augmentation",
         action="store_true",
         help="augment 52-value nine-ball states with horizontal/vertical table symmetries",
     )
     args = parser.parse_args()
+    if args.action_loss_weight < 0.0:
+        raise ValueError("action-loss-weight must be non-negative")
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -241,7 +244,7 @@ def main():
             pocket_loss = classification_loss(logits, batch_pocket)
             per_sample_action_loss = ((predicted_action - batch_action) ** 2).mean(dim=1)
             action_loss = (per_sample_action_loss * batch_weight).mean()
-            loss = pocket_loss + 2.0 * action_loss
+            loss = pocket_loss + args.action_loss_weight * action_loss
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -259,7 +262,9 @@ def main():
             val_action_loss = (
                 (validation_output[:, POCKET_COUNT:] - y_action_validation) ** 2
             ).mean()
-            val_loss = float((val_pocket_loss + 2.0 * val_action_loss).item())
+            val_loss = float((
+                val_pocket_loss + args.action_loss_weight * val_action_loss
+            ).item())
             pocket_accuracy = float(
                 (validation_output[:, :POCKET_COUNT].argmax(dim=1)
                  == y_pocket_validation).float().mean().item()
@@ -298,6 +303,7 @@ def main():
             "demonstrations": int(len(observations)),
             "training_examples_after_augmentation": int(len(train_observations)),
             "symmetry_augmentation": bool(args.symmetry_augmentation),
+            "action_loss_weight": float(args.action_loss_weight),
             "epochs": args.epochs,
             "seed": args.seed,
             "split_strategy": split_strategy,
@@ -323,6 +329,7 @@ def main():
         "demonstrations": len(observations),
         "training_examples_after_augmentation": len(train_observations),
         "symmetry_augmentation": bool(args.symmetry_augmentation),
+        "action_loss_weight": float(args.action_loss_weight),
         "split_strategy": split_strategy,
         "best_validation_loss": best_validation,
         "best_validation_pocket_accuracy": max(
