@@ -31,7 +31,7 @@ def generate(states: int, seed: int) -> dict[str, np.ndarray | dict]:
             skipped += 1
             continue
         legal_plans += 1
-        if plan.shot_type == "safety":
+        if plan.shot_type.startswith("safety"):
             safety_actions += 1
             skipped += 1
             continue
