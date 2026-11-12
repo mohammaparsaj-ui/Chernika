@@ -146,7 +146,7 @@ def _pocket_at_rail(body: _Body, rail: str) -> bool:
         else:
             adjacent = abs(pocket.y - TABLE_BOTTOM) <= body.radius * 2.0
             half_opening = pocket.opening_width * 0.5
-            along, pocket_along = body.x, pocket.y
+            along, pocket_along = body.x, pocket.x
         usable = max(1.0, half_opening - body.radius * 0.72)
         if adjacent and abs(along - pocket_along) <= usable:
             return True
