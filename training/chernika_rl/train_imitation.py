@@ -93,7 +93,12 @@ def augment_nine_ball_symmetries(
         dtype=np.float32,
     )
 
-    transformed_observations = [observations.copy()]
+    base_observations = observations.copy()
+    for pocket_index in range(6):
+        base_observations[:, 38 + 2 * pocket_index] = pocket_x[pocket_index]
+        base_observations[:, 39 + 2 * pocket_index] = pocket_y[pocket_index]
+
+    transformed_observations = [base_observations]
     transformed_actions = [actions.copy()]
     transformed_pockets = [pockets.copy()]
 
@@ -102,7 +107,7 @@ def augment_nine_ball_symmetries(
         (False, True, vertical_map),
         (True, True, rotate_map),
     ):
-        state = observations.copy()
+        state = base_observations.copy()
         if flip_x:
             state[:, 0] = 1.0 - state[:, 0]
         if flip_y:
