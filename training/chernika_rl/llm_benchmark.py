@@ -187,6 +187,8 @@ def main():
         # Reset to the same seeded state before the raw LLM gets its one attempt.
         env.reset(seed=seed)
         started = time.perf_counter()
+        raw = None
+        usage = {"prompt_tokens": 0, "completion_tokens": 0}
         try:
             raw, latency, usage = _call_model(model_name, provider_kwargs, prompt, args.timeout)
             parsed = _extract_json(raw)
@@ -224,12 +226,12 @@ def main():
                 "seed": seed,
                 "valid": False,
                 "error": str(exc),
+                "raw_output": raw,
                 "reward": reward,
                 "latency_seconds": time.perf_counter() - started,
                 **baseline,
                 **sac_baseline,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
+                **usage,
                 **info,
             }
         rows.append(row)
