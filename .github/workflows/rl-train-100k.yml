@@ -1,14 +1,7 @@
 name: Chernika SAC 100k training run
 
 on:
-  pull_request:
-    paths:
-      - 'training/**'
-      - '.github/workflows/rl-train-100k.yml'
-
-concurrency:
-  group: chernika-sac-${{ github.event.pull_request.head.sha }}
-  cancel-in-progress: true
+  workflow_dispatch:
 
 jobs:
   train:
