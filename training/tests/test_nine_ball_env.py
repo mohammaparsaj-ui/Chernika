@@ -18,11 +18,9 @@ def test_reset_builds_verified_nine_ball_diamond_state():
     assert info["lowest_ball"] == 1
     assert info["break_pending"] is True
     assert env.object_balls[1].y > env.object_balls[9].y
-    assert math.isclose(
-        env.object_balls[9].x,
-        (env.object_balls[1].x + env.object_balls[9].x) / 2.0,
-        abs_tol=100.0,
-    )
+    rack_center_x = (120.0 + 490.0) * 0.5
+    assert math.isclose(env.object_balls[9].x, rack_center_x, abs_tol=1e-6)
+    assert math.isclose(env.object_balls[1].x, rack_center_x, abs_tol=1e-6)
 
 
 def test_wrong_first_contact_is_a_foul():
