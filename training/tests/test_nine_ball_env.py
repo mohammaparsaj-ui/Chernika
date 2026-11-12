@@ -182,7 +182,7 @@ def test_missing_nine_ball_is_respotted_near_foot_spot_without_overlap():
     assert 9 in env.object_balls
     nine = env.object_balls[9]
     assert math.hypot(nine.x - blocker.x, nine.y - blocker.y) >= 2.0 * BALL_RADIUS_PX
-    assert nine.y > foot_y
+    assert nine.y < foot_y
     assert env.cue is None
 
 
