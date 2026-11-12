@@ -75,7 +75,7 @@ def main():
         imitation_action, ranked_pockets = predict_top_pockets(
             policy, observation, top_k=TOP_K
         )
-        if teacher_plan.shot_type == "safety":
+        if teacher_plan.shot_type.startswith("safety"):
             safety_teacher_states += 1
         else:
             comparisons += 1
