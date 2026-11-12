@@ -48,8 +48,9 @@ class ChernikaNineBallEnv(gym.Env):
     observation contains the cue, all nine numbered ball slots, legal-ball
     one-hot identity, six measured pockets, break state and shot progress.
 
-    This is a single-agent practice environment, not a complete match engine:
-    it ends on a foul or a legal 9-ball win and does not simulate an opponent.
+    By default this is a single-agent practice environment and fouls terminate
+    the episode. The complete-rack evaluator may opt into recoverable-foul mode;
+    opponent turns and match-level decisions remain in the rollout controller.
     """
 
     metadata = {"render_modes": []}

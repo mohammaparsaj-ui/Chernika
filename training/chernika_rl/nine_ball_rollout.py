@@ -526,8 +526,9 @@ def evaluate_racks(
             "Synthetic seeded diamond racks on the current Python physics port. "
             "The break remains physics-teacher controlled. Player 0 uses the "
             "selected controller and player 1 uses the greedy physics teacher; "
-            "legal no-pot shots pass the turn. Fouls still end the rollout "
-            "because ball-in-hand, 9-ball respotting and live Plato replay "
-            "validation are not modeled."
+            "legal no-pot shots pass the turn. Fouls pass the turn with "
+            "ball-in-hand, the 9-ball is respotted when required, and three "
+            "consecutive fouls lose the rack. Push-outs, stalemates and live "
+            "Plato replay validation are not modeled."
         ),
     }

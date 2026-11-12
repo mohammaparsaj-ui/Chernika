@@ -73,7 +73,7 @@ Complete-rack evaluation now alternates turns: a legal pot retains the shooter, 
 
 The imitation pocket classifier is trained only on potting demonstrations with valid six-pocket labels. Safety actions are executed in teacher self-play rollouts but excluded from that classifier's labels; the physics planner remains responsible for the safety fallback.
 
-Remaining limitations: only one-cushion banks and kicks are enumerated; multi-rail routes, deliberate combinations, spin/throw, ball-in-hand after fouls, 9-ball respotting and live Plato replay validation are not yet implemented. A foul still ends the synthetic rack evaluation.
+Remaining limitations: only one-cushion banks and kicks are enumerated; multi-rail routes, deliberate combinations, spin/throw, push-outs, stalemate re-racks and live Plato replay validation are not yet implemented.
 
 
 ## Match-level foul recovery and ball-in-hand

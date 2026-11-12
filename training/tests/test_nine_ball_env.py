@@ -184,3 +184,19 @@ def test_missing_nine_ball_is_respotted_near_foot_spot_without_overlap():
     assert math.hypot(nine.x - blocker.x, nine.y - blocker.y) >= 2.0 * BALL_RADIUS_PX
     assert nine.y > foot_y
     assert env.cue is None
+
+
+
+def test_nine_ball_is_not_respotted_when_it_remains_on_the_table():
+    env = ChernikaNineBallEnv()
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    one = Ball(250.0, 250.0, 1)
+    nine = Ball(400.0, 400.0, 9)
+    env.reset(
+        seed=8,
+        options={"cue": cue, "balls": [one, nine], "break_pending": False},
+    )
+    env.prepare_ball_in_hand()
+
+    assert env.respot_nine_ball() is None
+    assert env.object_balls[9] == nine
