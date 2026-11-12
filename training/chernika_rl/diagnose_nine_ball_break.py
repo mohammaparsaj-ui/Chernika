@@ -9,7 +9,120 @@ import numpy as np
 
 from .nine_ball_env import ChernikaNineBallEnv
 from .nine_ball_rules import assess_nine_ball_shot
-from .physics import simulate
+from .physics import (
+    Ball, TABLE_BOTTOM, TABLE_LEFT, TABLE_RIGHT, simulate,
+)
+
+
+def diagnose_canonical_reference() -> dict:
+    """Test the exact recorded rack mapping with center and second-ball break lines."""
+    env = ChernikaNineBallEnv()
+    rack = [
+        Ball(306.5, 274.5, 8),
+        Ball(294.5, 294.5, 6),
+        Ball(318.5, 294.5, 7),
+        Ball(283.5, 314.5, 4),
+        Ball(306.5, 314.5, 9),
+        Ball(329.5, 314.5, 5),
+        Ball(294.5, 334.5, 2),
+        Ball(318.5, 334.5, 3),
+        Ball(306.5, 354.5, 1),
+    ]
+    cue_y = TABLE_BOTTOM - 100.0
+    cue_x_values = (
+        (TABLE_LEFT + TABLE_RIGHT) * 0.5,
+        306.5,
+    )
+    delta_angles = (-0.02, -0.01, 0.0, 0.01, 0.02)
+    powers = (70.0, 80.0, 90.0, 97.8)
+    candidates = []
+
+    for cue_x in cue_x_values:
+        cue = Ball(cue_x, cue_y, 0, cue=True)
+        env.reset(seed=1, options={"balls": rack, "cue": cue})
+        target_one = env.object_balls[1]
+        direct = float(np.arctan2(target_one.y - cue.y, target_one.x - cue.x))
+        target_modes = (
+            ("apex_center", target_one),
+            ("second_row_left_ball_2", env.object_balls[2]),
+            ("second_row_right_ball_3", env.object_balls[3]),
+        )
+        for mode, aim_target in target_modes:
+            aim_angle = float(np.arctan2(
+                aim_target.y - cue.y, aim_target.x - cue.x
+            ))
+            for delta in delta_angles:
+                angle = aim_angle + delta
+                action_offset = float((angle - direct + np.pi) % (2.0 * np.pi) - np.pi)
+                for power in powers:
+                    result = simulate([cue, *rack], angle, power)
+                    assessment = assess_nine_ball_shot(
+                        result, 1, break_shot=True
+                    )
+                    candidates.append({
+                        "cue": [cue_x, cue_y],
+                        "aim_mode": mode,
+                        "aim_target_number": aim_target.number,
+                        "delta_angle_radians": delta,
+                        "action_angle_offset": action_offset / np.pi,
+                        "power_percent": power,
+                        "first_contact": result.first_contact_number,
+                        "correct_first_contact": result.first_contact_number == 1,
+                        "legal": assessment.legal_shot,
+                        "foul_reason": assessment.foul_reason,
+                        "pocketed_numbers": list(assessment.pocketed_numbers),
+                        "spread": len(result.post_contact_cushion_ball_numbers),
+                        "rail_ball_numbers": list(result.post_contact_cushion_ball_numbers),
+                        "ball_collisions": result.ball_collisions,
+                        "cushion_contacts": result.cushion_contacts,
+                        "simulated_seconds": result.simulated_seconds,
+                        "scratch": result.cue_scratch,
+                        "off_table": result.any_ball_off_table,
+                    })
+
+    legal = [row for row in candidates if row["legal"]]
+    valid = [
+        row for row in candidates
+        if row["correct_first_contact"] and not row["scratch"] and not row["off_table"]
+    ]
+    best = max(
+        valid,
+        key=lambda row: (
+            bool(row["pocketed_numbers"]),
+            row["spread"],
+            row["ball_collisions"],
+        ),
+        default=None,
+    )
+    return {
+        "rack_source": "frame-derived 1000323339.mp4 initial rack mapping",
+        "initial_ball_positions": {
+            str(ball.number): [ball.x, ball.y] for ball in rack
+        },
+        "cue_position_source": "centered current simulator default; exact video cue start was not retained",
+        "cue_y": cue_y,
+        "candidate_count": len(candidates),
+        "legal_candidate_count": len(legal),
+        "legal_candidate_rate": len(legal) / max(1, len(candidates)),
+        "correct_first_contact_candidate_count": len(valid),
+        "best_valid_candidate": best,
+        "candidates": candidates,
+        "observed_reference": {
+            "break_pocketed_ball_count": 2,
+            "post_break_cue": [155.5, 272.5],
+            "post_break_visible_balls": {
+                "1": [417.5, 823.5],
+                "2": [286.5, 479.5],
+                "3": [466.5, 455.5],
+                "4": [219.5, 261.5],
+                "5": [402.5, 658.5],
+                "7": [322.5, 277.5],
+                "8": [169.5, 643.0],
+                "9": [292.5, 305.5],
+            },
+            "note": "Ball 6 was not visible; exact cue start, shot angle and pocketed-ball identities were not retained.",
+        },
+    }
 
 
 def diagnose(
@@ -142,6 +255,7 @@ def diagnose(
         "racks_without_legal_candidate": [
             row["seed"] for row in per_rack if row["legal_candidates"] == 0
         ],
+        "canonical_reference": diagnose_canonical_reference(),
         "per_rack": per_rack,
         "note": (
             "Diagnostic grid only. It does not change the physics model or "
