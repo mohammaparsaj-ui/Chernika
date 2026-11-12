@@ -114,7 +114,7 @@ def plan_nine_ball_shot(
         # then transfer energy into one of the two adjacent rack balls.
         angle_candidates: list[tuple[float, bool]] = [
             (direct + offset * math.pi, False)
-            for offset in (-0.04, -0.02, 0.0, 0.02, 0.04)
+            for offset in (-0.02, 0.0, 0.02)
         ]
         second_row = []
         for ball in balls:
@@ -135,10 +135,10 @@ def plan_nine_ball_shot(
             aim_angle = math.atan2(
                 second_ball.y - cue.y, second_ball.x - cue.x
             )
-            for delta in (-0.02, -0.01, 0.0, 0.01, 0.02):
+            for delta in (-0.02, 0.0, 0.02):
                 angle_candidates.append((aim_angle + delta, True))
 
-        powers = (70.0, 80.0, 90.0, MAX_UI_POWER_PERCENT)
+        powers = (MAX_UI_POWER_PERCENT,)
         seen_offsets: set[float] = set()
         for candidate_angle, second_ball_line in angle_candidates:
             action_angle = wrap_angle(candidate_angle - direct)
