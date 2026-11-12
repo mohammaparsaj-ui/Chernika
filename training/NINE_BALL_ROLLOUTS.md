@@ -74,3 +74,14 @@ Complete-rack evaluation now alternates turns: a legal pot retains the shooter, 
 The imitation pocket classifier is trained only on potting demonstrations with valid six-pocket labels. Safety actions are executed in teacher self-play rollouts but excluded from that classifier's labels; the physics planner remains responsible for the safety fallback.
 
 Remaining limitations: only one-cushion banks and kicks are enumerated; multi-rail routes, deliberate combinations, spin/throw, ball-in-hand after fouls, 9-ball respotting and live Plato replay validation are not yet implemented. A foul still ends the synthetic rack evaluation.
+
+
+## Match-level foul recovery and ball-in-hand
+
+The complete-rack evaluator now uses a match-mode shot environment. After any foul, the incoming player receives ball-in-hand anywhere on the cloth. The cue ball is removed from its old position, and a deterministic placement search scores a small set of legal cloth-grid and direct-pot ghost-ball positions with the incoming player's controller before selecting the best placement.
+
+If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the foot spot. If that spot is occupied, the search moves down the long string toward the foot rail first, then above the spot; other object balls are not respotted. Three consecutive fouls by one player lose the rack. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
+
+The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
+
+Still outstanding: push-out decisions, the optional three-ball break rule, stalemate re-racks, full opponent strength diversity, multi-rail bank/kick search, spin/throw and live Plato replay validation.

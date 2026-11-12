@@ -121,3 +121,66 @@ def test_max_shots_truncates_a_legal_nonterminal_episode():
     assert info["pocketed_numbers"] == []
     assert terminated is False
     assert truncated is True
+
+
+
+def test_match_mode_keeps_foul_recoverable_and_moves_cue_into_hand():
+    env = ChernikaNineBallEnv(continue_after_foul=True)
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    one = Ball(400.0, 400.0, 1)
+    two = Ball(350.0, 550.0, 2)
+    env.reset(
+        seed=5,
+        options={"cue": cue, "balls": [one, two], "break_pending": False},
+    )
+
+    _, _, terminated, truncated, info = env.step(
+        np.array([0.0, 0.0], dtype=np.float32)
+    )
+
+    assert info["foul"] is True
+    assert terminated is False
+    assert truncated is False
+    assert env.cue is None
+
+
+def test_ball_in_hand_placement_rejects_overlap_and_accepts_clear_cloth():
+    env = ChernikaNineBallEnv()
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    one = Ball(300.0, 400.0, 1)
+    nine = Ball(420.0, 400.0, 9)
+    env.reset(
+        seed=6,
+        options={"cue": cue, "balls": [one, nine], "break_pending": False},
+    )
+    env.prepare_ball_in_hand()
+
+    assert env.is_legal_cue_position(200.0, 200.0)
+    assert not env.is_legal_cue_position(300.0, 400.0)
+    observation = env.place_cue_ball(200.0, 200.0)
+    assert observation.shape == (OBSERVATION_SIZE,)
+    assert env.cue is not None
+    assert (env.cue.x, env.cue.y) == (200.0, 200.0)
+
+
+def test_missing_nine_ball_is_respotted_near_foot_spot_without_overlap():
+    env = ChernikaNineBallEnv()
+    foot_x = (120.0 + 490.0) * 0.5
+    foot_y = 169.0 + (895.0 - 169.0) * 0.20
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    blocker = Ball(foot_x, foot_y, 1)
+    two = Ball(200.0, 250.0, 2)
+    env.reset(
+        seed=7,
+        options={"cue": cue, "balls": [blocker, two], "break_pending": False},
+    )
+    env.prepare_ball_in_hand()
+
+    position = env.respot_nine_ball()
+
+    assert position is not None
+    assert 9 in env.object_balls
+    nine = env.object_balls[9]
+    assert math.hypot(nine.x - blocker.x, nine.y - blocker.y) >= 2.0 * BALL_RADIUS_PX
+    assert nine.y > foot_y
+    assert env.cue is None

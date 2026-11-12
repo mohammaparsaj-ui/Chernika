@@ -54,11 +54,19 @@ class ChernikaNineBallEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(self, max_shots: int = MAX_SHOTS_DEFAULT):
+    def __init__(
+        self,
+        max_shots: int = MAX_SHOTS_DEFAULT,
+        *,
+        continue_after_foul: bool = False,
+    ):
         super().__init__()
         if max_shots < 1:
             raise ValueError("max_shots must be positive")
         self.max_shots = int(max_shots)
+        # The default Gym task remains terminal on a foul. The complete-match
+        # evaluator opts in and handles ball-in-hand at the match layer.
+        self.continue_after_foul = bool(continue_after_foul)
         self.action_space = spaces.Box(
             low=np.array([-1.0, -1.0], dtype=np.float32),
             high=np.array([1.0, 1.0], dtype=np.float32),
@@ -97,6 +105,88 @@ class ChernikaNineBallEnv(gym.Env):
             y = center_y + offset_y * BALL_RADIUS_PX
             balls[number] = Ball(x, y, number, cue=False)
         return balls
+
+
+    def is_legal_cue_position(self, x: float, y: float) -> bool:
+        """Return whether a ball-in-hand placement is on-cloth and non-overlapping."""
+        radius = BALL_RADIUS_PX
+        if not (
+            TABLE_LEFT + radius <= x <= TABLE_RIGHT - radius
+            and TABLE_TOP + radius <= y <= TABLE_BOTTOM - radius
+        ):
+            return False
+        for ball in self.object_balls.values():
+            minimum = radius + ball.radius + 0.5
+            if math.hypot(x - ball.x, y - ball.y) < minimum:
+                return False
+        return True
+
+    def prepare_ball_in_hand(self) -> None:
+        """Remove the cue ball from play while the incoming player places it."""
+        self.cue = None
+        self._last_obs = None
+
+    def place_cue_ball(self, x: float, y: float) -> np.ndarray:
+        """Place the cue ball legally and return the refreshed 52-value state."""
+        if not self.is_legal_cue_position(float(x), float(y)):
+            raise ValueError("cue-ball placement overlaps a ball or lies off the table")
+        self.cue = Ball(float(x), float(y), 0, cue=True)
+        self._last_obs = self._make_observation()
+        return self._last_obs.copy()
+
+    def respot_nine_ball(self) -> tuple[float, float] | None:
+        """Spot a missing 9-ball on the foot spot, searching down-table first."""
+        if 9 in self.object_balls:
+            ball = self.object_balls[9]
+            return (ball.x, ball.y)
+
+        foot_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
+        foot_y = TABLE_TOP + TABLE_HEIGHT_PX * 0.20
+        radius = BALL_RADIUS_PX
+
+        def clear(x: float, y: float) -> bool:
+            if not (
+                TABLE_LEFT + radius <= x <= TABLE_RIGHT - radius
+                and TABLE_TOP + radius <= y <= TABLE_BOTTOM - radius
+            ):
+                return False
+            for ball in self.object_balls.values():
+                if math.hypot(x - ball.x, y - ball.y) < radius + ball.radius + 0.25:
+                    return False
+            return True
+
+        # WPA spotting order: as close as possible to the foot spot, first
+        # between the foot spot and foot rail, then above the foot spot.
+        max_steps = int(TABLE_HEIGHT_PX)
+        chosen = None
+        for direction in (1.0, -1.0):
+            for step in range(max_steps + 1):
+                y = foot_y + direction * step
+                if clear(foot_x, y):
+                    chosen = (foot_x, y)
+                    break
+            if chosen is not None:
+                break
+
+        # A highly unusual fully blocked long-string fallback: search the
+        # remaining cloth for the nearest clear point to the foot spot.
+        if chosen is None:
+            best_distance = float("inf")
+            for yi in range(int(TABLE_TOP + radius), int(TABLE_BOTTOM - radius) + 1, 4):
+                for xi in range(int(TABLE_LEFT + radius), int(TABLE_RIGHT - radius) + 1, 4):
+                    if not clear(float(xi), float(yi)):
+                        continue
+                    distance = math.hypot(xi - foot_x, yi - foot_y)
+                    if distance < best_distance:
+                        best_distance = distance
+                        chosen = (float(xi), float(yi))
+        if chosen is None:
+            raise RuntimeError("no legal position is available to respot the 9-ball")
+
+        self.object_balls[9] = Ball(chosen[0], chosen[1], 9, cue=False)
+        if self.cue is not None:
+            self._last_obs = self._make_observation()
+        return chosen
 
     def _make_observation(self) -> np.ndarray:
         if self.cue is None:
@@ -172,6 +262,9 @@ class ChernikaNineBallEnv(gym.Env):
         if self.cue is None or not self.object_balls:
             raise RuntimeError("reset() must be called before a playable step()")
 
+        previous_observation = (
+            self._last_obs.copy() if self._last_obs is not None else None
+        )
         values = np.asarray(action, dtype=np.float32).reshape(2)
         values = np.clip(values, self.action_space.low, self.action_space.high)
         legal_ball = self.lowest_ball
@@ -208,7 +301,12 @@ class ChernikaNineBallEnv(gym.Env):
         self.object_balls = remaining
 
         cue_outcome = next((outcome for outcome in simulation.outcomes if outcome.cue), None)
-        if cue_outcome is not None:
+        if self.continue_after_foul and not assessment.legal_shot:
+            # The cue ball is now in the incoming player's hand, even if it
+            # did not scratch. The match controller will place it after any
+            # required 9-ball respot.
+            self.cue = None
+        elif cue_outcome is not None:
             self.cue = Ball(
                 cue_outcome.x, cue_outcome.y, 0, cue=True,
                 radius=original_cue.radius,
@@ -230,14 +328,29 @@ class ChernikaNineBallEnv(gym.Env):
         else:
             reward -= 5.0
 
-        self._last_obs = self._make_observation()
-        terminated = bool(not legal_shot or won or not self.object_balls)
+        if self.cue is None:
+            # No policy consumes this interim observation: the match controller
+            # must place the cue ball before the next decision.
+            if previous_observation is None:
+                raise RuntimeError("missing pre-shot observation during ball-in-hand")
+            self._last_obs = previous_observation
+        else:
+            self._last_obs = self._make_observation()
+        terminated = bool(
+            won
+            or (not legal_shot and not self.continue_after_foul)
+            or (not self.object_balls and legal_shot)
+        )
         truncated = bool(self.shot_count >= self.max_shots and not terminated)
         info = {
             "legal_ball": legal_ball,
             "first_contact": simulation.first_contact_number,
             "pocketed_numbers": pocketed_numbers,
             "remaining_balls": sorted(self.object_balls),
+            "off_table_numbers": sorted(
+                outcome.number for outcome in simulation.outcomes
+                if not outcome.cue and outcome.off_table
+            ),
             "legal_shot": legal_shot,
             "foul": not legal_shot,
             "foul_reason": foul_reason,

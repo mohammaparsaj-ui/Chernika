@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 from typing import Any
+import math
 import numpy as np
 
 from .nine_ball_break import BreakPolicy
 from .nine_ball_env import ChernikaNineBallEnv
-from .physics import BREAK_CUE_SPEED_MULTIPLIER
+from .physics import (
+    BREAK_CUE_SPEED_MULTIPLIER, BALL_RADIUS_PX, POCKETS,
+    TABLE_LEFT, TABLE_TOP, TABLE_RIGHT, TABLE_BOTTOM,
+)
 from .nine_ball_planner import plan_nine_ball_shot_lookahead
 from .nine_ball_teacher import NineBallPlan, plan_nine_ball_shot
 from .imitation import ImitationPolicy, predict_top_pockets
@@ -93,6 +97,71 @@ def _choose_plan(
     raise ValueError(f"unknown rollout strategy: {strategy}")
 
 
+
+def _ball_in_hand_candidates(env: ChernikaNineBallEnv) -> list[tuple[float, float]]:
+    """Small deterministic placement set: cloth grid plus six potting ghost points."""
+    radius = BALL_RADIUS_PX
+    center_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
+    center_y = (TABLE_TOP + TABLE_BOTTOM) * 0.5
+    xs = (TABLE_LEFT + radius + 4.0, center_x, TABLE_RIGHT - radius - 4.0)
+    ys = (TABLE_TOP + radius + 4.0, center_y, TABLE_BOTTOM - radius - 4.0)
+    positions: dict[tuple[float, float], None] = {
+        (round(x, 2), round(y, 2)): None for x in xs for y in ys
+    }
+
+    target = env.object_balls.get(env.lowest_ball)
+    if target is not None:
+        for pocket in POCKETS:
+            dx, dy = pocket.x - target.x, pocket.y - target.y
+            distance = math.hypot(dx, dy)
+            if distance < 1e-6:
+                continue
+            ux, uy = dx / distance, dy / distance
+            ghost = (
+                target.x - ux * (2.0 * radius + 1.0),
+                target.y - uy * (2.0 * radius + 1.0),
+            )
+            positions[(round(ghost[0], 2), round(ghost[1], 2))] = None
+    return list(positions)
+
+
+def _choose_ball_in_hand_position(
+    env: ChernikaNineBallEnv,
+    strategy: str,
+    policy: ImitationPolicy | None,
+    top_k: int,
+) -> tuple[np.ndarray, tuple[float, float], float | None]:
+    """Choose a legal cue placement by scoring the best immediate legal shot."""
+    best_position: tuple[float, float] | None = None
+    best_score = float("-inf")
+    first_legal: tuple[float, float] | None = None
+
+    for x, y in _ball_in_hand_candidates(env):
+        if not env.is_legal_cue_position(x, y):
+            continue
+        observation = env.place_cue_ball(x, y)
+        if first_legal is None:
+            first_legal = (x, y)
+        plan, planning = _choose_plan(
+            strategy, env, observation, policy, depth=1, top_k=top_k
+        )
+        if plan is None:
+            continue
+        score = planning.get("lookahead_score")
+        if score is None:
+            score = plan.score
+        score = float(score)
+        if score > best_score:
+            best_score = score
+            best_position = (x, y)
+
+    chosen = best_position or first_legal
+    if chosen is None:
+        raise RuntimeError("no legal ball-in-hand cue placement could be found")
+    observation = env.place_cue_ball(*chosen)
+    return observation, chosen, (best_score if best_position is not None else None)
+
+
 def _next_player_after_shot(
     current_player: int,
     legal_shot: bool,
@@ -114,12 +183,13 @@ def run_rack(
     top_k: int = 3,
     opponent_strategy: str = "teacher_greedy",
 ) -> dict[str, Any]:
-    """Play one seeded rack with the selected controller against a greedy opponent.
+    """Play one seeded nine-ball rack with WPA-style foul recovery.
 
-    Player 0 uses strategy; player 1 uses opponent_strategy. Legal pots retain
-    the turn and legal no-pot shots (including safeties) hand it over. The break
-    is physics-teacher controlled. Fouls end the rollout until ball-in-hand and
-    9-ball respotting are implemented.
+    Player 0 uses strategy and player 1 uses opponent_strategy. Legal pots
+    retain the turn; legal misses pass it. Fouls pass the turn, give the
+    incoming player ball-in-hand, and respot the 9-ball when required. Three
+    consecutive fouls by one player lose the rack. Push-outs and stalemate
+    handling are not yet modeled.
     """
     if strategy not in STRATEGIES:
         raise ValueError(f"strategy must be one of {STRATEGIES}")
@@ -132,7 +202,9 @@ def run_rack(
     if not 1 <= top_k <= 6:
         raise ValueError("top_k must be in [1, 6]")
 
-    env = ChernikaNineBallEnv(max_shots=max_shots)
+    env = ChernikaNineBallEnv(
+        max_shots=max_shots, continue_after_foul=True
+    )
     observation, reset_info = env.reset(seed=seed)
     if strategy == "hybrid_top3_lookahead":
         if policy is None or policy.observation_size != 52:
@@ -141,16 +213,48 @@ def run_rack(
     initial_balls = sorted(reset_info["remaining_balls"])
     records: list[dict[str, Any]] = []
     break_legal = False
+    break_foul = False
     break_spread = 0
     break_pocketed = 0
     fallback_count = 0
     status = "no_break_plan"
-    win = False
-    foul = False
-    total_pocketed = 0
     winner: int | None = None
     current_player = 0
     turn_switches = 0
+    total_pocketed = 0
+    total_fouls = 0
+    mid_rack_fouls = 0
+    ball_in_hand_placements = 0
+    nine_respots = 0
+    consecutive_fouls = [0, 0]
+    foul_counts = [0, 0]
+    safety_shots = 0
+
+    def recover_foul(fouling_player: int) -> tuple[np.ndarray, tuple[float, float] | None, tuple[float, float] | None]:
+        nonlocal current_player, turn_switches, ball_in_hand_placements, nine_respots
+        foul_counts[fouling_player] += 1
+        consecutive_fouls[fouling_player] += 1
+        if consecutive_fouls[fouling_player] >= 3:
+            current_player = 1 - fouling_player
+            return observation, None, None
+
+        current_player = 1 - fouling_player
+        turn_switches += 1
+        env.prepare_ball_in_hand()
+        respot = env.respot_nine_ball()
+        if respot is not None:
+            nine_respots += 1
+        active_strategy = strategy if current_player == 0 else opponent_strategy
+        active_policy = (
+            policy
+            if current_player == 0 and active_strategy == "hybrid_top3_lookahead"
+            else None
+        )
+        next_observation, placement, _ = _choose_ball_in_hand_position(
+            env, active_strategy, active_policy, top_k
+        )
+        ball_in_hand_placements += 1
+        return next_observation, placement, respot
 
     break_plan = plan_nine_ball_shot(
         env.cue, list(env.object_balls.values()), break_shot=True
@@ -161,11 +265,11 @@ def run_rack(
             break_plan.action
         )
         break_legal = bool(info["legal_shot"])
+        break_foul = bool(info["foul"])
         break_spread = len(info["post_contact_cushion_ball_numbers"])
         break_pocketed = len(info["pocketed_numbers"])
         total_pocketed += break_pocketed
-        win = bool(info["win"])
-        foul = bool(info["foul"])
+        safety_shots += int(break_plan.shot_type == "safety")
         records.append({
             "shot": 1,
             "player": 0,
@@ -178,7 +282,9 @@ def run_rack(
             "pocketed_numbers": info["pocketed_numbers"],
             "remaining_balls": info["remaining_balls"],
             "cue_before": cue_before,
-            "cue_after": (env.cue.x, env.cue.y) if env.cue is not None else None,
+            "cue_after": (
+                (env.cue.x, env.cue.y) if env.cue is not None else None
+            ),
             "action": break_plan.action.tolist(),
             "power_percent": info["power_percent"],
             "pocket_index": -1,
@@ -189,16 +295,27 @@ def run_rack(
             "neural_fallback": False,
             "reward": reward,
         })
-        if win:
-            status = "win"
+        if info["win"]:
             winner = 0
-        elif foul:
-            status = "break_foul"
+            status = "win"
+        elif info["foul"]:
+            total_fouls += 1
+            observation, placement, respot = recover_foul(0)
+            records[-1]["ball_in_hand_for_player"] = current_player
+            records[-1]["ball_in_hand_position"] = placement
+            records[-1]["nine_respot_position"] = respot
+            status = (
+                "three_foul_loss"
+                if consecutive_fouls[0] >= 3 else "in_progress"
+            )
+            if status == "three_foul_loss":
+                winner = 1
         elif truncated:
             status = "max_shots"
         elif terminated:
             status = "rack_ended_without_win"
         else:
+            consecutive_fouls[0] = 0
             next_player = _next_player_after_shot(
                 0, info["legal_shot"], info["pocketed_numbers"]
             )
@@ -225,6 +342,7 @@ def run_rack(
         observation, reward, terminated, truncated, info = env.step(plan.action)
         fallback_count += int(planning.get("neural_fallback", False))
         total_pocketed += len(info["pocketed_numbers"])
+        safety_shots += int(plan.shot_type == "safety")
         records.append({
             "shot": info["shot_count"],
             "player": current_player,
@@ -238,7 +356,9 @@ def run_rack(
             "pocketed_numbers": info["pocketed_numbers"],
             "remaining_balls": info["remaining_balls"],
             "cue_before": cue_before,
-            "cue_after": (env.cue.x, env.cue.y) if env.cue is not None else None,
+            "cue_after": (
+                (env.cue.x, env.cue.y) if env.cue is not None else None
+            ),
             "action": plan.action.tolist(),
             "power_percent": info["power_percent"],
             "pocket_index": plan.pocket_index,
@@ -252,17 +372,25 @@ def run_rack(
         })
 
         if info["win"]:
-            win = True
             winner = current_player
             status = "win"
         elif info["foul"]:
-            foul = True
-            status = "foul"
+            foul_player = current_player
+            total_fouls += 1
+            mid_rack_fouls += 1
+            observation, placement, respot = recover_foul(foul_player)
+            records[-1]["ball_in_hand_for_player"] = current_player
+            records[-1]["ball_in_hand_position"] = placement
+            records[-1]["nine_respot_position"] = respot
+            if consecutive_fouls[foul_player] >= 3:
+                winner = 1 - foul_player
+                status = "three_foul_loss"
         elif terminated:
             status = "rack_ended_without_win"
         elif truncated:
             status = "max_shots"
         else:
+            consecutive_fouls[current_player] = 0
             next_player = _next_player_after_shot(
                 current_player, info["legal_shot"], info["pocketed_numbers"]
             )
@@ -278,10 +406,16 @@ def run_rack(
         "strategy": strategy,
         "opponent_strategy": opponent_strategy,
         "status": status,
-        "win": win,
+        "win": winner == 0,
         "winner": winner,
-        "foul": foul,
+        "foul": total_fouls > 0,
+        "total_fouls": total_fouls,
+        "mid_rack_fouls": mid_rack_fouls,
+        "foul_counts_by_player": foul_counts,
+        "consecutive_fouls_by_player": consecutive_fouls,
+        "three_foul_loss": status == "three_foul_loss",
         "break_legal": break_legal,
+        "break_foul": break_foul,
         "break_spread": break_spread,
         "break_cue_speed_multiplier": BREAK_CUE_SPEED_MULTIPLIER,
         "break_pocketed": break_pocketed,
@@ -291,6 +425,9 @@ def run_rack(
         "remaining_balls": sorted(env.object_balls),
         "neural_fallback_count": fallback_count,
         "turn_switches": turn_switches,
+        "ball_in_hand_placements": ball_in_hand_placements,
+        "nine_respots": nine_respots,
+        "safety_shots": safety_shots,
         "trajectory": records,
     }
 
@@ -307,15 +444,17 @@ def summarize_racks(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "rack_win_rate": candidate_wins / count,
         "candidate_win_rate": candidate_wins / count,
         "opponent_win_rate": opponent_wins / count,
-        "completed_rack_rate": sum(row["status"] == "win" for row in rows) / count,
+        "completed_rack_rate": len(winners) / count,
         "legal_break_rate": sum(row["break_legal"] for row in rows) / count,
-        "break_foul_rate": sum(row["status"] == "break_foul" for row in rows) / count,
-        "mid_rack_foul_rate": sum(
-            row["foul"] and row["status"] == "foul" for row in rows
-        ) / count,
-        "total_foul_rate": sum(
-            row["status"] in ("break_foul", "foul") for row in rows
-        ) / count,
+        "break_foul_rate": sum(row.get("break_foul", False) for row in rows) / count,
+        "mid_rack_foul_rate": sum(row.get("mid_rack_fouls", 0) > 0 for row in rows) / count,
+        "total_foul_rate": sum(row.get("total_fouls", 0) > 0 for row in rows) / count,
+        "three_foul_loss_rate": sum(row.get("three_foul_loss", False) for row in rows) / count,
+        "mean_total_fouls": float(np.mean([row.get("total_fouls", 0) for row in rows])),
+        "mean_ball_in_hand_placements": float(np.mean([
+            row.get("ball_in_hand_placements", 0) for row in rows
+        ])),
+        "mean_nine_respots": float(np.mean([row.get("nine_respots", 0) for row in rows])),
         "no_legal_plan_rate": sum(row["status"] == "no_legal_plan" for row in rows) / count,
         "max_shot_rate": sum(row["status"] == "max_shots" for row in rows) / count,
         "mean_shots": float(np.mean([row["shots"] for row in rows])),
@@ -330,8 +469,7 @@ def summarize_racks(rows: list[dict[str, Any]]) -> dict[str, Any]:
             row["neural_fallback_count"] for row in rows
         ])),
         "mean_safety_shots_per_rack": float(np.mean([
-            sum(shot.get("shot_type") == "safety" for shot in row.get("trajectory", []))
-            for row in rows
+            row.get("safety_shots", 0) for row in rows
         ])),
         "mean_turn_switches": float(np.mean([
             row.get("turn_switches", 0) for row in rows
