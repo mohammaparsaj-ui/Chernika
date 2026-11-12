@@ -7,7 +7,7 @@ This is an **offline training project**, separate from the Android APK. It train
 - **Billiards-RL** is the reference for the SAC curriculum and its continuous action space (angle offset + strike speed): https://github.com/yongjin-shin/billiards-rl
 - **CueTip** is the reference for the higher-level architecture: a language model proposes a tactical intention, while a physics simulator and optimizer verify/adjust the actual shot: https://github.com/SeanMemery/cuetip
 - **LLMBilliardsMaster** is a useful raw-LLM-versus-algorithmic-agent research reference: https://github.com/PasserbyZzz/LLMBilliardsMaster. Its README reports tests with DeepSeek-V3.2, Qwen-Plus, MoonShot-K2 and GLM-4.5-Air, but also says the full LLM-planner + low-level Bayesian-optimizer integration is future work. We use it as a benchmark-design reference only; no source code is copied.
-- The training environment below uses a Python parity port of Chernika's current PoolPhysics.java and PlatoTableCalibration.java, rather than training only on a different idealized table. No source code is copied from those research repositories.
+- The training environment below uses a Python mirror of Chernika's current PoolPhysics.java and PlatoTableCalibration.java, rather than training only on a different idealized table. No source code is copied from those research repositories.
 
 **Important research caveat:** Billiards-RL's own Exp-16 README reports Phase 1 heuristic pocketing at 62.2% versus SAC at 63.6% (p=0.49), and Phase 0 heuristic at 56.9% versus SAC at 55.3% (p=0.62). RL is therefore not assumed to beat geometry; Chernika's held-out benchmark is a deployment gate, not a formality.
 
@@ -23,7 +23,7 @@ This is an **offline training project**, separate from the Android APK. It train
 - Reward: target pocketing dominates; legal first contact is rewarded; scratches and off-table events are heavily penalized; a small distance-progress term helps learning.
 - Every episode is one shot. This is a deliberately narrow skill-learning stage, not a full 9-ball policy.
 
-**Calibration warning:** the Java physics constants are still provisional and based on a small number of Plato replays. The Python port is intended to stay in parity with the current Java model; it is not a claim that the model perfectly reproduces all live-game physics. Spin, throw, masse, ball-in-hand, combinations and multi-rail effects are not included in Phase 1.
+**Calibration warning:** the Java physics constants are still provisional and based on a small number of Plato replays. The Python mirror is intended to follow the current Java model; it has not yet been cross-validated against a Java golden-output suite and does not claim to reproduce every live-game effect. Spin, throw, masse, ball-in-hand, combinations and multi-rail effects are not included in Phase 1.
 
 ## Install
 
@@ -89,7 +89,7 @@ Examples (use the provider's API key as an environment variable; never commit ke
 
 Current candidate IDs are provider-controlled and can change: OpenAI gpt-6-astra / gpt-6.1-sol / gpt-6.1-terra; Anthropic claude-opus-5-5 / claude-sonnet-5-5 / claude-fable-5-2; DeepSeek deepseek-v4-pro / deepseek-flash; Qwen qwen3.7-plus / qwen3.8-max / qwen3.8-flash. Verify account access and current IDs before running.
 
-For a fair comparison, run every model with the **same seed and episode count**. The first test uses numeric state only; a separate image-input test can later measure visual table-reading without mixing it into aiming accuracy.
+For a fair comparison, run every model with the **same seed and episode count**. The report also includes the ghost-ball/physics heuristic rate on the exact same states. Once a SAC checkpoint exists, add --sac-model artifacts/sac_single_ball/best_model/best_model.zip to include SAC on those same states. The first test uses numeric state only; a separate image-input test can later measure visual table-reading without mixing it into aiming accuracy.
 
 ## Transfer plan — do not skip the gate
 
