@@ -116,7 +116,7 @@ def plan_nine_ball_shot_lookahead(
             total_score=plan.score,
             next_score=None,
             planned_pockets=(
-                () if plan.shot_type == "safety" else (plan.pocket_index,)
+                () if plan.shot_type.startswith("safety") else (plan.pocket_index,)
             ),
             candidate_count=1,
             future_candidate_count=0,
