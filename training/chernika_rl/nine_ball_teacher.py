@@ -77,6 +77,7 @@ def plan_nine_ball_shot(
     cue: Ball,
     object_balls: list[Ball] | tuple[Ball, ...],
     break_shot: bool = False,
+    pocket_indices: list[int] | tuple[int, ...] | None = None,
 ) -> NineBallPlan | None:
     """Find a legal, physics-verified direct shot for the current 9-ball state.
 
@@ -104,6 +105,8 @@ def plan_nine_ball_shot(
     candidates: list[NineBallPlan] = []
 
     if break_shot:
+        if pocket_indices is not None:
+            raise ValueError("pocket_indices cannot be used for a break shot")
         if legal_ball != 1:
             return None
         angle_offsets = (-0.04, -0.02, 0.0, 0.02, 0.04)
@@ -127,7 +130,16 @@ def plan_nine_ball_shot(
         deceleration = ROLLING_RESISTANCE * GRAVITY * pixels_per_meter
         maximum_speed = MAX_CUE_SPEED_MPS * pixels_per_meter
 
-        for pocket_index, pocket in enumerate(POCKETS):
+        selected_pockets = list(range(len(POCKETS))) if pocket_indices is None else list(pocket_indices)
+        if not selected_pockets or any(
+            index < 0 or index >= len(POCKETS) for index in selected_pockets
+        ):
+            raise ValueError("pocket_indices must contain pocket indices in [0, 5]")
+        if len(set(selected_pockets)) != len(selected_pockets):
+            raise ValueError("pocket_indices must be unique")
+
+        for pocket_index in selected_pockets:
+            pocket = POCKETS[pocket_index]
             dx = pocket.x - target.x
             dy = pocket.y - target.y
             object_distance = math.hypot(dx, dy)
