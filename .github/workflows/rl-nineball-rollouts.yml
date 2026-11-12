@@ -7,6 +7,14 @@ on:
       - 'training/chernika_rl/export_nine_ball_policy.py'
       - 'training/chernika_rl/physics.py'
       - 'app/src/main/java/com/cherunika/chernika/PoolPhysics.java'
+      - 'app/src/main/java/com/cherunika/chernika/ShotPlanner.java'
+      - 'app/src/main/java/com/cherunika/chernika/ChernikaAccessibilityService.java'
+      - 'app/src/main/java/com/cherunika/chernika/NineBallObservationEncoder.java'
+      - 'app/src/main/java/com/cherunika/chernika/NineBallImitationPolicy.java'
+      - 'app/src/test/**'
+      - 'app/build.gradle'
+      - 'build.gradle'
+      - 'settings.gradle'
       - 'training/chernika_rl/generate_nine_ball_break_data.py'
       - 'training/chernika_rl/train_nine_ball_break.py'
       - 'training/chernika_rl/evaluate_nine_ball_break.py'
@@ -29,6 +37,9 @@ jobs:
     # The 60-rack, depth-2 teacher rollout generator alone used ~38 minutes
     # in the previous run; the full pipeline needs room for training/evaluation.
     timeout-minutes: 180
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -89,5 +100,73 @@ jobs:
             training/artifacts/nine_ball_rollout_policy.bin
             training/artifacts/nine_ball_rollout_policy.metrics.json
             training/artifacts/nine_ball_rollout_evaluation.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Check rollout policy promotion threshold
+        id: policy_gate
+        working-directory: training
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          report = json.load(open("artifacts/nine_ball_rollout_evaluation.json"))
+          results = report["results"]
+          teacher = results["teacher_lookahead"]["metrics"]
+          hybrid = results["hybrid_top3_lookahead"]["metrics"]
+
+          checks = {
+              "rack_win_rate": hybrid["rack_win_rate"] >= teacher["rack_win_rate"] - 0.10,
+              "completed_rack_rate": hybrid["completed_rack_rate"] >= teacher["completed_rack_rate"] - 0.10,
+              "no_legal_plan_rate": hybrid["no_legal_plan_rate"] <= teacher["no_legal_plan_rate"] + 0.10,
+          }
+          promotable = all(checks.values())
+          print(json.dumps({
+              "promotable": promotable,
+              "checks": checks,
+              "teacher_lookahead": teacher,
+              "hybrid_top3_lookahead": hybrid,
+          }, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"promotable={'true' if promotable else 'false'}\\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("## Neural policy promotion gate\\n")
+              summary.write(f"- Promotable: **{promotable}**\\n")
+              for name, passed in checks.items():
+                  summary.write(f"- {name}: {'PASS' if passed else 'FAIL'}\\n")
+          PY
+      - name: Set up Java 17
+        if: steps.policy_gate.outputs.promotable == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 9.8.2
+        if: steps.policy_gate.outputs.promotable == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
+      - name: Configure Android SDK
+        if: steps.policy_gate.outputs.promotable == 'true'
+        run: |
+          set -euo pipefail
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;36.0.0" "platform-tools"
+      - name: Package trained policy and build debug APK
+        if: steps.policy_gate.outputs.promotable == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          cp training/artifacts/nine_ball_rollout_policy.bin app/src/main/assets/nine_ball_policy.bin
+          gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Upload Chernika debug APK
+        if: steps.policy_gate.outputs.promotable == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernika-nineball-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
