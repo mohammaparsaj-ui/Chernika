@@ -128,12 +128,12 @@ jobs:
               "hybrid_top3_lookahead": hybrid,
           }, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"promotable={'true' if promotable else 'false'}\\n")
+              output.write(f"promotable={'true' if promotable else 'false'}\n")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write("## Neural policy promotion gate\\n")
-              summary.write(f"- Promotable: **{promotable}**\\n")
+              summary.write("## Neural policy promotion gate\n")
+              summary.write(f"- Promotable: **{promotable}**\n")
               for name, passed in checks.items():
-                  summary.write(f"- {name}: {'PASS' if passed else 'FAIL'}\\n")
+                  summary.write(f"- {name}: {'PASS' if passed else 'FAIL'}\n")
           PY
       - name: Set up Java 17
         if: steps.policy_gate.outputs.promotable == 'true'
