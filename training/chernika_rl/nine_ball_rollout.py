@@ -269,7 +269,7 @@ def run_rack(
         break_spread = len(info["post_contact_cushion_ball_numbers"])
         break_pocketed = len(info["pocketed_numbers"])
         total_pocketed += break_pocketed
-        safety_shots += int(break_plan.shot_type == "safety")
+        safety_shots += int(break_plan.shot_type.startswith("safety"))
         records.append({
             "shot": 1,
             "player": 0,
@@ -342,7 +342,7 @@ def run_rack(
         observation, reward, terminated, truncated, info = env.step(plan.action)
         fallback_count += int(planning.get("neural_fallback", False))
         total_pocketed += len(info["pocketed_numbers"])
-        safety_shots += int(plan.shot_type == "safety")
+        safety_shots += int(plan.shot_type.startswith("safety"))
         records.append({
             "shot": info["shot_count"],
             "player": current_player,
