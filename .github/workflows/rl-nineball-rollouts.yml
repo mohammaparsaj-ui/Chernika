@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'training/chernika_rl/nine_ball_*.py'
+      - 'training/chernika_rl/physics.py'
+      - 'app/src/main/java/com/cherunika/chernika/PoolPhysics.java'
       - 'training/chernika_rl/generate_nine_ball_break_data.py'
       - 'training/chernika_rl/train_nine_ball_break.py'
       - 'training/chernika_rl/evaluate_nine_ball_break.py'
