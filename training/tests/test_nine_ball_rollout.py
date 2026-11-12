@@ -1,5 +1,6 @@
 from chernika_rl.nine_ball_rollout import (
-    _next_player_after_shot, run_rack, summarize_racks,
+    _next_player_after_shot, _record_foul, _record_legal_shot,
+    run_rack, summarize_racks,
 )
 
 
@@ -88,12 +89,12 @@ def test_ball_in_hand_search_returns_a_legal_position():
 
 
 def test_three_consecutive_fouls_are_counted_per_player():
-    # A player's streak survives the opponent's turn and resets only after
-    # that same player completes a legal shot; match-loop state is per player.
     streaks = [2, 0]
-    streaks[0] += 1
+    assert _record_foul(streaks, 0) is True
+    assert _record_foul(streaks, 1) is False
+    assert streaks == [3, 1]
+
+    _record_legal_shot(streaks, 1)
     assert streaks == [3, 0]
-    streaks[1] = 0
-    assert streaks == [3, 0]
-    streaks[0] = 0
+    _record_legal_shot(streaks, 0)
     assert streaks == [0, 0]
