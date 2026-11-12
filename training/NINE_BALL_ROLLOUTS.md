@@ -90,3 +90,8 @@ Still outstanding: push-out decisions, the optional three-ball break rule, stale
 ### One-cushion kick safety fallback
 
 When direct safety contacts are blocked, the teacher now unfolds the cue-ball path across each of the four cushions and tests a one-rail kick into the lowest-numbered ball. Each candidate must pass the same physics and nine-ball legality checks as other shots. Kick safeties retain a distinct internal shot type but are excluded from all six-pocket imitation labels.
+
+
+## Neural training augmentation
+
+The 52-input pocket-ranking policy can now be trained with horizontal, vertical and 180-degree table symmetries. Pocket labels are remapped for each reflection, mirrored angle-offset targets change sign, power targets are preserved, and pocket-coordinate features are reset to the canonical measured anchors. Augmentation is applied only after the train/validation split, so mirrored copies cannot leak into validation.
