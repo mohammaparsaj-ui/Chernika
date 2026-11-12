@@ -38,7 +38,7 @@ jobs:
       - name: Train 52-input nine-ball policy
         working-directory: training
         run: |
-          python -m chernika_rl.train_imitation --data artifacts/nine_ball_teacher_dataset.npz --epochs 80 --batch-size 128 --seed 321 --min-demonstrations 50 --output artifacts/nine_ball_policy.pt
+          python -m chernika_rl.train_imitation --data artifacts/nine_ball_teacher_dataset.npz --epochs 80 --batch-size 128 --seed 321 --min-demonstrations 50 --symmetry-augmentation --output artifacts/nine_ball_policy.pt
       - name: Evaluate on 150 held-out multi-ball states
         working-directory: training
         run: |
