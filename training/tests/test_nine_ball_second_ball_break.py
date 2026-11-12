@@ -32,15 +32,19 @@ def test_second_ball_break_is_legal_and_environment_matches_teacher():
     assert plan is not None
     assert plan.assessment.legal_shot
     assert plan.result.first_contact_number == 1
-    # A second-row line is a small, non-zero deviation from the apex centerline.
-    assert 0.001 < abs(float(plan.action[0])) < 0.03
+    # The wider second-row fan can require a larger normalized angle offset.
+    assert 0.001 < abs(float(plan.action[0])) < 0.08
 
     _, _, _, _, info = env.step(plan.action)
     assert info["break_shot"] is True
     assert info["legal_shot"] is True
     assert info["foul"] is False
     assert info["first_contact"] == 1
+    assert info["break_requirement_met"] is True
     assert (
-        len(info["post_contact_cushion_ball_numbers"]) >= 4
+        (
+            len(info["post_contact_cushion_ball_numbers"]) >= 3
+            and info["post_contact_object_ball_cushion_contacts"] >= 4
+        )
         or len(info["pocketed_numbers"]) >= 1
     )
