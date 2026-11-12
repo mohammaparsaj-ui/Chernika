@@ -57,6 +57,7 @@ POCKETS: tuple[Pocket, ...] = (
     Pocket("bottom_left", 118.61, 899.90, 48.0, 47.0, True),
     Pocket("bottom_right", 490.48, 899.83, 48.0, 47.0, True),
 )
+MAX_POCKET_CAPTURE_RADIUS = max(p.capture_radius for p in POCKETS)
 
 @dataclass(frozen=True)
 class Ball:
@@ -115,6 +116,12 @@ def _pixels_per_meter() -> float:
 
 
 def _pocket_at_center(body: _Body) -> bool:
+    # Exact broad-phase rejection: a ball well inside all four table edges
+    # cannot be within any measured pocket's capture radius.
+    margin = MAX_POCKET_CAPTURE_RADIUS + body.radius
+    if (TABLE_LEFT + margin < body.x < TABLE_RIGHT - margin
+            and TABLE_TOP + margin < body.y < TABLE_BOTTOM - margin):
+        return False
     for pocket in POCKETS:
         effective = max(2.0, pocket.capture_radius - body.radius * 0.75)
         if math.hypot(body.x - pocket.x, body.y - pocket.y) <= effective:
@@ -139,7 +146,7 @@ def _pocket_at_rail(body: _Body, rail: str) -> bool:
         else:
             adjacent = abs(pocket.y - TABLE_BOTTOM) <= body.radius * 2.0
             half_opening = pocket.opening_width * 0.5
-            along, pocket_along = body.x, pocket.x
+            along, pocket_along = body.x, pocket.y
         usable = max(1.0, half_opening - body.radius * 0.72)
         if adjacent and abs(along - pocket_along) <= usable:
             return True
@@ -147,8 +154,13 @@ def _pocket_at_rail(body: _Body, rail: str) -> bool:
 
 
 def _resolve_rails(body: _Body) -> int:
-    contacts = 0
     r = body.radius
+    # Do not scan pocket anchors unless the ball actually touches a rail.
+    if (body.x - r > TABLE_LEFT and body.x + r < TABLE_RIGHT
+            and body.y - r > TABLE_TOP and body.y + r < TABLE_BOTTOM):
+        return 0
+
+    contacts = 0
     if body.vx < 0 and body.x - r <= TABLE_LEFT:
         if _pocket_at_rail(body, "left"):
             body.pocketed = True
@@ -191,7 +203,6 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
     cue_index = next((i for i, b in enumerate(sources) if b.cue), None)
     if cue_index is None or not math.isfinite(angle_radians):
         return SimulationResult((), None, 0, 0, 0.0, False, False)
-    cue_source = sources[cue_index]
     bodies = [_Body(b) for b in sources]
     cue = bodies[cue_index]
 
