@@ -271,6 +271,7 @@ def run_rack(
     )
     if break_plan is not None:
         cue_before = (env.cue.x, env.cue.y) if env.cue is not None else None
+        observation_before = observation.copy()
         observation, reward, terminated, truncated, info = env.step(
             break_plan.action
         )
@@ -295,6 +296,7 @@ def run_rack(
             "cue_after": (
                 (env.cue.x, env.cue.y) if env.cue is not None else None
             ),
+            "observation": observation_before.tolist(),
             "action": break_plan.action.tolist(),
             "power_percent": info["power_percent"],
             "pocket_index": -1,
@@ -349,6 +351,7 @@ def run_rack(
             status = "no_legal_plan"
             break
 
+        observation_before = observation.copy()
         observation, reward, terminated, truncated, info = env.step(plan.action)
         fallback_count += int(planning.get("neural_fallback", False))
         total_pocketed += len(info["pocketed_numbers"])
@@ -369,6 +372,7 @@ def run_rack(
             "cue_after": (
                 (env.cue.x, env.cue.y) if env.cue is not None else None
             ),
+            "observation": observation_before.tolist(),
             "action": plan.action.tolist(),
             "power_percent": info["power_percent"],
             "pocket_index": plan.pocket_index,
