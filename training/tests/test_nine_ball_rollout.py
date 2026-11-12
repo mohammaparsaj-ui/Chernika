@@ -1,6 +1,5 @@
 from chernika_rl.nine_ball_rollout import (
-    _next_player_after_shot, _record_foul, _record_legal_shot,
-    run_rack, summarize_racks,
+    _next_player_after_shot, run_rack, summarize_racks,
 )
 
 
@@ -90,13 +89,15 @@ def test_ball_in_hand_search_returns_a_legal_position():
     assert score is not None
 
 
-def test_three_consecutive_fouls_are_counted_per_player():
-    streaks = [2, 0]
-    assert _record_foul(streaks, 0) is True
-    assert _record_foul(streaks, 1) is False
-    assert streaks == [3, 1]
 
-    _record_legal_shot(streaks, 1)
-    assert streaks == [3, 0]
-    _record_legal_shot(streaks, 0)
-    assert streaks == [0, 0]
+
+
+def test_three_ordinary_fouls_are_not_a_automatic_rack_loss_in_plato_rules():
+    # The match controller counts fouls but does not apply WPA's three-foul loss.
+    result = run_rack(
+        20261113,
+        strategy="teacher_greedy",
+        max_shots=1,
+    )
+    assert "three_foul_loss" not in result
+    assert "consecutive_fouls_by_player" not in result

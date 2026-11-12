@@ -80,7 +80,7 @@ Remaining limitations: only one-cushion banks and kicks are enumerated; multi-ra
 
 The complete-rack evaluator now uses a match-mode shot environment. After any foul, the incoming player receives ball-in-hand anywhere on the cloth. The cue ball is removed from its old position, and a deterministic placement search scores a small set of legal cloth-grid and direct-pot ghost-ball positions with the incoming player's controller before selecting the best placement.
 
-If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the foot spot. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three consecutive fouls by one player lose the rack. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
+If the 9-ball was pocketed or driven off the table on a foul, it is respotted on the original #1 apex position. If that spot is occupied, the search moves up-screen toward the foot rail first, then down-screen toward the head rail; other object balls are not respotted. Three consecutive fouls by one player lose the rack. These transitions follow the WPA 9-ball foul, spotting and three-foul provisions.
 
 The default Gym training environment still terminates on fouls. Only the complete-match evaluator opts into recoverable-foul mode, so existing single-shot training semantics remain unchanged.
 
@@ -90,3 +90,18 @@ Still outstanding: push-out decisions, the optional three-ball break rule, stale
 ### One-cushion kick safety fallback
 
 When direct safety contacts are blocked, the teacher now unfolds the cue-ball path across each of the four cushions and tests a one-rail kick into the lowest-numbered ball. Each candidate must pass the same physics and nine-ball legality checks as other shots. Kick safeties retain a distinct internal shot type but are excluded from all six-pocket imitation labels.
+
+
+## Plato-specific rule corrections
+
+The match engine follows the project's observed Plato 9-ball rulebook rather than generic WPA defaults:
+
+- A break may contact any object ball first; missing every object ball is an illegal break.
+- A no-pot break requires at least three distinct object balls to make at least four total object-ball cushion contacts. Cue-ball rail contacts do not count toward this break requirement.
+- A pocketed object ball satisfies the break pot-or-cushion requirement, but a scratch or other foul still applies.
+- An illegal no-pot break is reracked and the opponent breaks from behind the head string. Break scratches use the documented behind-head-string branches; pocketed non-9 balls stay down.
+- Ordinary ball-in-hand is anywhere on the cloth, and touching another ball is permitted as long as balls do not overlap.
+- A 9-ball pocketed on a foul is respotted at the original #1 apex coordinate (306.5, 354.5), not the original #9 centre. If blocked, the simulator chooses the nearest non-overlapping open position around that apex.
+- Three ordinary shot fouls do not automatically lose the rack.
+
+The head-string coordinate is currently a provisional one-quarter-table estimate because the exact white-line pixel position has not yet been measured from the Plato screenshot. It must be calibrated before live break-foul placement is considered pixel-exact.

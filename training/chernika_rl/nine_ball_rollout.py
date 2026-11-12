@@ -6,7 +6,7 @@ import math
 import numpy as np
 
 from .nine_ball_break import BreakPolicy
-from .nine_ball_env import ChernikaNineBallEnv
+from .nine_ball_env import ChernikaNineBallEnv, HEAD_STRING_Y
 from .physics import (
     BREAK_CUE_SPEED_MULTIPLIER, BALL_RADIUS_PX, POCKETS,
     TABLE_LEFT, TABLE_TOP, TABLE_RIGHT, TABLE_BOTTOM,
@@ -98,24 +98,24 @@ def _choose_plan(
 
 
 
-def _record_foul(consecutive_fouls: list[int], player: int) -> bool:
-    """Increment one player's consecutive-foul count and report a rack loss."""
-    consecutive_fouls[player] += 1
-    return consecutive_fouls[player] >= 3
-
-
-def _record_legal_shot(consecutive_fouls: list[int], player: int) -> None:
-    """A legal shot clears only the shooter's own consecutive-foul streak."""
-    consecutive_fouls[player] = 0
-
-
-def _ball_in_hand_candidates(env: ChernikaNineBallEnv) -> list[tuple[float, float]]:
-    """Small deterministic placement set: cloth grid plus six potting ghost points."""
+def _ball_in_hand_candidates(
+    env: ChernikaNineBallEnv,
+    *,
+    behind_head_string: bool = False,
+) -> list[tuple[float, float]]:
+    """Deterministic legal placements, optionally restricted behind Plato's head string."""
     radius = BALL_RADIUS_PX
     center_x = (TABLE_LEFT + TABLE_RIGHT) * 0.5
     center_y = (TABLE_TOP + TABLE_BOTTOM) * 0.5
     xs = (TABLE_LEFT + radius + 4.0, center_x, TABLE_RIGHT - radius - 4.0)
-    ys = (TABLE_TOP + radius + 4.0, center_y, TABLE_BOTTOM - radius - 4.0)
+    if behind_head_string:
+        ys = (
+            HEAD_STRING_Y + radius + 4.0,
+            (HEAD_STRING_Y + TABLE_BOTTOM) * 0.5,
+            TABLE_BOTTOM - radius - 4.0,
+        )
+    else:
+        ys = (TABLE_TOP + radius + 4.0, center_y, TABLE_BOTTOM - radius - 4.0)
     positions: dict[tuple[float, float], None] = {
         (round(x, 2), round(y, 2)): None for x in xs for y in ys
     }
@@ -132,7 +132,8 @@ def _ball_in_hand_candidates(env: ChernikaNineBallEnv) -> list[tuple[float, floa
                 target.x - ux * (2.0 * radius + 1.0),
                 target.y - uy * (2.0 * radius + 1.0),
             )
-            positions[(round(ghost[0], 2), round(ghost[1], 2))] = None
+            if not behind_head_string or ghost[1] >= HEAD_STRING_Y + radius + 0.5:
+                positions[(round(ghost[0], 2), round(ghost[1], 2))] = None
     return list(positions)
 
 
@@ -141,16 +142,24 @@ def _choose_ball_in_hand_position(
     strategy: str,
     policy: ImitationPolicy | None,
     top_k: int,
+    *,
+    behind_head_string: bool = False,
 ) -> tuple[np.ndarray, tuple[float, float], float | None]:
     """Choose a legal cue placement by scoring the best immediate legal shot."""
     best_position: tuple[float, float] | None = None
     best_score = float("-inf")
     first_legal: tuple[float, float] | None = None
 
-    for x, y in _ball_in_hand_candidates(env):
-        if not env.is_legal_cue_position(x, y):
+    for x, y in _ball_in_hand_candidates(
+        env, behind_head_string=behind_head_string
+    ):
+        if not env.is_legal_cue_position(
+            x, y, behind_head_string=behind_head_string
+        ):
             continue
-        observation = env.place_cue_ball(x, y)
+        observation = env.place_cue_ball(
+            x, y, behind_head_string=behind_head_string
+        )
         if first_legal is None:
             first_legal = (x, y)
         plan, planning = _choose_plan(
@@ -169,7 +178,9 @@ def _choose_ball_in_hand_position(
     chosen = best_position or first_legal
     if chosen is None:
         raise RuntimeError("no legal ball-in-hand cue placement could be found")
-    observation = env.place_cue_ball(*chosen)
+    observation = env.place_cue_ball(
+        *chosen, behind_head_string=behind_head_string
+    )
     return observation, chosen, (best_score if best_position is not None else None)
 
 
@@ -194,13 +205,14 @@ def run_rack(
     top_k: int = 3,
     opponent_strategy: str = "teacher_greedy",
 ) -> dict[str, Any]:
-    """Play one seeded nine-ball rack with WPA-style foul recovery.
+    """Play one seeded Plato 9-ball rack using observed match rules.
 
-    Player 0 uses strategy and player 1 uses opponent_strategy. Legal pots
-    retain the turn; legal misses pass it. Fouls pass the turn, give the
-    incoming player ball-in-hand, and respot the 9-ball when required. Three
-    consecutive fouls by one player lose the rack. Push-outs and stalemate
-    handling are not yet modeled.
+    Legal pots retain the turn; legal misses pass it. Ordinary fouls give the
+    incoming player ball-in-hand anywhere. Break fouls use Plato's special
+    branches: illegal no-pot breaks rerack and pass the break; scratch branches
+    place the incoming cue ball behind the head string. A 9 pocketed on a foul
+    is respotted at the original #1 apex position. Plato does not impose an
+    automatic loss for three ordinary shot fouls.
     """
     if strategy not in STRATEGIES:
         raise ValueError(f"strategy must be one of {STRATEGIES}")
@@ -227,6 +239,8 @@ def run_rack(
     break_foul = False
     break_spread = 0
     break_pocketed = 0
+    break_attempts = 0
+    rerack_count = 0
     fallback_count = 0
     status = "no_break_plan"
     winner: int | None = None
@@ -237,59 +251,73 @@ def run_rack(
     mid_rack_fouls = 0
     ball_in_hand_placements = 0
     nine_respots = 0
-    consecutive_fouls = [0, 0]
     foul_counts = [0, 0]
     safety_shots = 0
 
-    def recover_foul(fouling_player: int) -> tuple[np.ndarray, tuple[float, float] | None, tuple[float, float] | None]:
+    def active_controller(player: int) -> tuple[str, ImitationPolicy | None]:
+        active_strategy = strategy if player == 0 else opponent_strategy
+        active_policy = (
+            policy
+            if player == 0 and active_strategy == "hybrid_top3_lookahead"
+            else None
+        )
+        return active_strategy, active_policy
+
+    def recover_foul(
+        fouling_player: int,
+    ) -> tuple[np.ndarray, tuple[float, float] | None, tuple[float, float] | None]:
         nonlocal current_player, turn_switches, ball_in_hand_placements, nine_respots
         foul_counts[fouling_player] += 1
-        if _record_foul(consecutive_fouls, fouling_player):
-            current_player = 1 - fouling_player
-            return observation, None, None
-
         current_player = 1 - fouling_player
         turn_switches += 1
         env.prepare_ball_in_hand()
         respot = env.respot_nine_ball()
         if respot is not None:
             nine_respots += 1
-        active_strategy = strategy if current_player == 0 else opponent_strategy
-        active_policy = (
-            policy
-            if current_player == 0 and active_strategy == "hybrid_top3_lookahead"
-            else None
-        )
+        active_strategy, active_policy = active_controller(current_player)
         next_observation, placement, _ = _choose_ball_in_hand_position(
             env, active_strategy, active_policy, top_k
         )
         ball_in_hand_placements += 1
         return next_observation, placement, respot
 
-    break_plan = plan_nine_ball_shot(
-        env.cue, list(env.object_balls.values()), break_shot=True
-    )
-    if break_plan is not None:
+    # Plato permits a rerack after an illegal no-pot break. The incoming
+    # player becomes the next breaker, and the shot counter remains cumulative.
+    break_player = 0
+    while env.break_pending and env.shot_count < max_shots:
+        break_attempts += 1
+        break_plan = plan_nine_ball_shot(
+            env.cue, list(env.object_balls.values()), break_shot=True
+        )
+        if break_plan is None:
+            status = "no_break_plan"
+            break
         cue_before = (env.cue.x, env.cue.y) if env.cue is not None else None
         observation_before = observation.copy()
         observation, reward, terminated, truncated, info = env.step(
             break_plan.action
         )
         break_legal = bool(info["legal_shot"])
-        break_foul = bool(info["foul"])
-        break_spread = len(info["post_contact_cushion_ball_numbers"])
-        break_pocketed = len(info["pocketed_numbers"])
-        total_pocketed += break_pocketed
-        safety_shots += int(break_plan.shot_type.startswith("safety"))
+        break_foul = break_foul or bool(info["foul"])
+        break_spread = max(
+            break_spread, len(info["post_contact_cushion_ball_numbers"])
+        )
+        break_pocketed += len(info["pocketed_numbers"])
+        total_pocketed += len(info["pocketed_numbers"])
         records.append({
-            "shot": 1,
-            "player": 0,
+            "shot": info["shot_count"],
+            "player": break_player,
             "break": True,
+            "break_attempt": break_attempts,
             "shot_type": break_plan.shot_type,
             "legal_ball": info["legal_ball"],
             "first_contact": info["first_contact"],
             "legal": info["legal_shot"],
             "foul_reason": info["foul_reason"],
+            "break_requirement_met": info["break_requirement_met"],
+            "post_contact_object_ball_cushion_contacts": (
+                info["post_contact_object_ball_cushion_contacts"]
+            ),
             "pocketed_numbers": info["pocketed_numbers"],
             "remaining_balls": info["remaining_balls"],
             "cue_before": cue_before,
@@ -307,43 +335,76 @@ def run_rack(
             "neural_fallback": False,
             "reward": reward,
         })
-        if info["win"]:
-            winner = 0
-            status = "win"
-        elif info["foul"]:
-            total_fouls += 1
-            observation, placement, respot = recover_foul(0)
-            records[-1]["ball_in_hand_for_player"] = current_player
-            records[-1]["ball_in_hand_position"] = placement
-            records[-1]["nine_respot_position"] = respot
-            status = (
-                "three_foul_loss"
-                if consecutive_fouls[0] >= 3 else "in_progress"
-            )
-            if status == "three_foul_loss":
-                winner = 1
-        elif truncated:
-            status = "max_shots"
-        elif terminated:
-            status = "rack_ended_without_win"
-        else:
-            _record_legal_shot(consecutive_fouls, 0)
-            next_player = _next_player_after_shot(
-                0, info["legal_shot"], info["pocketed_numbers"]
-            )
-            if next_player != 0:
-                turn_switches += 1
-            current_player = next_player
-            status = "in_progress"
 
-    while status == "in_progress" and env.shot_count < max_shots:
+        if info["win"]:
+            winner = break_player
+            status = "win"
+            break
+        if info["foul"]:
+            total_fouls += 1
+            foul_counts[break_player] += 1
+            incoming_player = 1 - break_player
+            current_player = incoming_player
+            turn_switches += 1
+
+            # Only an illegal no-pot break is reracked. A scratch while
+            # pocketing an object ball keeps those balls down.
+            if (
+                not info["pocketed_numbers"]
+                and not info["break_requirement_met"]
+            ):
+                observation = env.rerack_for_break()
+                rerack_count += 1
+                records[-1]["reracked"] = True
+                records[-1]["next_breaker"] = incoming_player
+                break_player = incoming_player
+                if truncated:
+                    status = "max_shots"
+                    break
+                continue
+
+            env.prepare_ball_in_hand()
+            respot = env.respot_nine_ball()
+            if respot is not None:
+                nine_respots += 1
+            active_strategy, active_policy = active_controller(incoming_player)
+            observation, placement, _ = _choose_ball_in_hand_position(
+                env,
+                active_strategy,
+                active_policy,
+                top_k,
+                behind_head_string=True,
+            )
+            ball_in_hand_placements += 1
+            records[-1]["ball_in_hand_for_player"] = incoming_player
+            records[-1]["ball_in_hand_position"] = placement
+            records[-1]["ball_in_hand_region"] = "behind_head_string"
+            records[-1]["nine_respot_position"] = respot
+            status = "in_progress"
+            break
+
+        if terminated:
+            status = "rack_ended_without_win"
+            break
+        if truncated:
+            status = "max_shots"
+            break
+
+        if info["pocketed_numbers"]:
+            current_player = break_player
+        else:
+            current_player = 1 - break_player
+            turn_switches += 1
+        status = "in_progress"
+        break
+
+    while (
+        status == "in_progress"
+        and not env.break_pending
+        and env.shot_count < max_shots
+    ):
         cue_before = (env.cue.x, env.cue.y) if env.cue is not None else None
-        active_strategy = strategy if current_player == 0 else opponent_strategy
-        active_policy = (
-            policy
-            if current_player == 0 and active_strategy == "hybrid_top3_lookahead"
-            else None
-        )
+        active_strategy, active_policy = active_controller(current_player)
         plan, planning = _choose_plan(
             active_strategy, env, observation, active_policy, depth, top_k
         )
@@ -396,15 +457,11 @@ def run_rack(
             records[-1]["ball_in_hand_for_player"] = current_player
             records[-1]["ball_in_hand_position"] = placement
             records[-1]["nine_respot_position"] = respot
-            if consecutive_fouls[foul_player] >= 3:
-                winner = 1 - foul_player
-                status = "three_foul_loss"
         elif terminated:
             status = "rack_ended_without_win"
         elif truncated:
             status = "max_shots"
         else:
-            _record_legal_shot(consecutive_fouls, current_player)
             next_player = _next_player_after_shot(
                 current_player, info["legal_shot"], info["pocketed_numbers"]
             )
@@ -426,10 +483,10 @@ def run_rack(
         "total_fouls": total_fouls,
         "mid_rack_fouls": mid_rack_fouls,
         "foul_counts_by_player": foul_counts,
-        "consecutive_fouls_by_player": consecutive_fouls,
-        "three_foul_loss": status == "three_foul_loss",
         "break_legal": break_legal,
         "break_foul": break_foul,
+        "break_attempts": break_attempts,
+        "reracks": rerack_count,
         "break_spread": break_spread,
         "break_cue_speed_multiplier": BREAK_CUE_SPEED_MULTIPLIER,
         "break_pocketed": break_pocketed,
@@ -463,7 +520,10 @@ def summarize_racks(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "break_foul_rate": sum(row.get("break_foul", False) for row in rows) / count,
         "mid_rack_foul_rate": sum(row.get("mid_rack_fouls", 0) > 0 for row in rows) / count,
         "total_foul_rate": sum(row.get("total_fouls", 0) > 0 for row in rows) / count,
-        "three_foul_loss_rate": sum(row.get("three_foul_loss", False) for row in rows) / count,
+        "rerack_rate": sum(row.get("reracks", 0) > 0 for row in rows) / count,
+        "mean_break_attempts": float(np.mean([
+            row.get("break_attempts", 1) for row in rows
+        ])),
         "mean_total_fouls": float(np.mean([row.get("total_fouls", 0) for row in rows])),
         "mean_ball_in_hand_placements": float(np.mean([
             row.get("ball_in_hand_placements", 0) for row in rows
@@ -541,8 +601,9 @@ def evaluate_racks(
             "The break remains physics-teacher controlled. Player 0 uses the "
             "selected controller and player 1 uses the greedy physics teacher; "
             "legal no-pot shots pass the turn. Fouls pass the turn with "
-            "ball-in-hand, the 9-ball is respotted when required, and three "
-            "consecutive fouls lose the rack. Push-outs, stalemates and live "
+            "ball-in-hand, Plato's break-specific rerack and head-string "
+            "placement, and the 9-ball's original-#1-apex respot. Three ordinary "
+            "fouls do not automatically lose the game. Push-outs, stalemates and live "
             "Plato replay validation are not modeled."
         ),
     }

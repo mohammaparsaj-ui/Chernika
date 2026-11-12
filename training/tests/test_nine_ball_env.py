@@ -2,7 +2,9 @@ import math
 
 import numpy as np
 
-from chernika_rl.nine_ball_env import ChernikaNineBallEnv, OBSERVATION_SIZE
+from chernika_rl.nine_ball_env import (
+    ChernikaNineBallEnv, OBSERVATION_SIZE, HEAD_STRING_Y,
+)
 from chernika_rl.physics import Ball, BALL_RADIUS_PX, POCKETS
 from chernika_rl.teacher import plan_teacher_shot_for_pocket
 
@@ -18,9 +20,10 @@ def test_reset_builds_verified_nine_ball_diamond_state():
     assert info["lowest_ball"] == 1
     assert info["break_pending"] is True
     assert env.object_balls[1].y > env.object_balls[9].y
-    rack_center_x = (120.0 + 490.0) * 0.5
-    assert math.isclose(env.object_balls[9].x, rack_center_x, abs_tol=1e-6)
-    assert math.isclose(env.object_balls[1].x, rack_center_x, abs_tol=1e-6)
+    assert math.isclose(env.object_balls[9].x, 306.5, abs_tol=1e-6)
+    assert math.isclose(env.object_balls[9].y, 314.5, abs_tol=1e-6)
+    assert math.isclose(env.object_balls[1].x, 306.5, abs_tol=1e-6)
+    assert math.isclose(env.object_balls[1].y, 354.5, abs_tol=1e-6)
 
 
 def test_wrong_first_contact_is_a_foul():
@@ -163,12 +166,30 @@ def test_ball_in_hand_placement_rejects_overlap_and_accepts_clear_cloth():
     assert (env.cue.x, env.cue.y) == (200.0, 200.0)
 
 
-def test_missing_nine_ball_is_respotted_near_foot_spot_without_overlap():
+def test_missing_nine_ball_is_respotted_at_original_one_ball_apex_when_clear():
     env = ChernikaNineBallEnv()
-    foot_x = (120.0 + 490.0) * 0.5
-    foot_y = 169.0 + (895.0 - 169.0) * 0.20
     cue = Ball(300.0, 700.0, 0, cue=True)
-    blocker = Ball(foot_x, foot_y, 1)
+    one = Ball(200.0, 250.0, 1)
+    two = Ball(220.0, 250.0, 2)
+    env.reset(
+        seed=7,
+        options={"cue": cue, "balls": [one, two], "break_pending": False},
+    )
+    env.prepare_ball_in_hand()
+
+    position = env.respot_nine_ball()
+
+    assert position == (306.5, 354.5)
+    assert 9 in env.object_balls
+    assert env.object_balls[9].x == 306.5
+    assert env.object_balls[9].y == 354.5
+    assert env.cue is None
+
+
+def test_blocked_nine_respot_moves_to_nearest_open_side_of_original_apex():
+    env = ChernikaNineBallEnv()
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    blocker = Ball(306.5, 354.5, 1)
     two = Ball(200.0, 250.0, 2)
     env.reset(
         seed=7,
@@ -179,11 +200,9 @@ def test_missing_nine_ball_is_respotted_near_foot_spot_without_overlap():
     position = env.respot_nine_ball()
 
     assert position is not None
-    assert 9 in env.object_balls
     nine = env.object_balls[9]
-    assert math.hypot(nine.x - blocker.x, nine.y - blocker.y) >= 2.0 * BALL_RADIUS_PX
-    assert nine.y < foot_y
-    assert env.cue is None
+    assert math.hypot(nine.x - 306.5, nine.y - 354.5) >= 2.0 * BALL_RADIUS_PX - 0.25
+    assert math.hypot(nine.x - 306.5, nine.y - 354.5) <= 2.0 * BALL_RADIUS_PX + 2.0
 
 
 
@@ -200,3 +219,38 @@ def test_nine_ball_is_not_respotted_when_it_remains_on_the_table():
 
     assert env.respot_nine_ball() is None
     assert env.object_balls[9] == nine
+
+
+
+def test_rerack_after_illegal_break_restores_diamond_and_break_state():
+    env = ChernikaNineBallEnv()
+    env.reset(seed=9)
+    env.object_balls.pop(2)
+    env.break_pending = False
+
+    observation = env.rerack_for_break()
+
+    assert observation.shape == (OBSERVATION_SIZE,)
+    assert sorted(env.object_balls) == list(range(1, 10))
+    assert env.break_pending is True
+    assert env.cue is not None
+    assert env.cue.y > HEAD_STRING_Y
+
+
+
+def test_cue_ball_may_touch_an_object_ball_during_ball_in_hand():
+    env = ChernikaNineBallEnv()
+    cue = Ball(300.0, 700.0, 0, cue=True)
+    one = Ball(300.0, 400.0, 1)
+    nine = Ball(420.0, 400.0, 9)
+    env.reset(
+        seed=10,
+        options={"cue": cue, "balls": [one, nine], "break_pending": False},
+    )
+    env.prepare_ball_in_hand()
+
+    touching_y = one.y + 2.0 * BALL_RADIUS_PX
+    assert env.is_legal_cue_position(one.x, touching_y)
+    assert env.is_legal_cue_position(
+        one.x, touching_y, behind_head_string=False
+    )

@@ -38,8 +38,8 @@ def generate(
 
     legal_breaks = break_fouls = break_wins = 0
     safety_actions = total_post_break_actions = legal_turn_handoffs = 0
-    rack_wins = rack_losses = rack_fouls = no_plan_states = 0
-    ball_in_hand_placements = nine_respots = three_foul_losses = 0
+    rack_wins = rack_fouls = no_plan_states = 0
+    ball_in_hand_placements = nine_respots = reracks = 0
     racks_with_demonstrations = 0
     states_per_rack: list[int] = []
     status_counts: dict[str, int] = {}
@@ -55,19 +55,19 @@ def generate(
         status = str(rack["status"])
         status_counts[status] = status_counts.get(status, 0) + 1
         rack_wins += int(status == "win")
-        rack_losses += int(status == "three_foul_loss")
+        reracks += int(rack.get("reracks", 0))
         rack_fouls += int(rack.get("total_fouls", 0) > 0)
         no_plan_states += int(status == "no_legal_plan")
         ball_in_hand_placements += int(rack.get("ball_in_hand_placements", 0))
         nine_respots += int(rack.get("nine_respots", 0))
-        three_foul_losses += int(rack.get("three_foul_loss", False))
-
         trajectory = rack.get("trajectory", [])
-        break_record = next((shot for shot in trajectory if shot.get("break")), None)
-        if break_record is not None:
-            legal_breaks += int(bool(break_record.get("legal", False)))
-            break_fouls += int(not bool(break_record.get("legal", False)))
-            break_wins += int(status == "win" and rack.get("shots", 0) == 1)
+        break_records = [shot for shot in trajectory if shot.get("break")]
+        legal_breaks += int(any(bool(shot.get("legal", False)) for shot in break_records))
+        break_fouls += sum(not bool(shot.get("legal", False)) for shot in break_records)
+        break_wins += int(
+            status == "win"
+            and any(9 in shot.get("pocketed_numbers", []) for shot in break_records)
+        )
 
         rack_demo_count = 0
         for shot in trajectory:
@@ -125,8 +125,7 @@ def generate(
         "break_fouls": break_fouls,
         "break_wins": break_wins,
         "rack_9ball_wins": rack_wins,
-        "three_foul_losses": three_foul_losses,
-        "rack_three_foul_losses": rack_losses,
+        "reracks": reracks,
         "racks_with_any_foul": rack_fouls,
         "states_without_any_legal_plan": no_plan_states,
         "safety_actions_executed_but_excluded": safety_actions,

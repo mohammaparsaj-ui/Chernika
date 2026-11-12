@@ -16,7 +16,6 @@ def test_generator_uses_complete_rack_trajectories_and_excludes_safeties(monkeyp
             "total_fouls": 1,
             "ball_in_hand_placements": 1,
             "nine_respots": 1,
-            "three_foul_loss": False,
             "trajectory": [
                 {
                     "break": True,
