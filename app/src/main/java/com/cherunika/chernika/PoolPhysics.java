@@ -35,6 +35,8 @@ final class PoolPhysics {
     // Revisit simultaneous contacts in a tightly packed rack. A single pass
     // made energy propagation depend on ball-number iteration order.
     private static final int BALL_COLLISION_ITERATIONS = 4;
+    // Provisional break-only calibration; normal shots keep the base speed.
+    private static final double BREAK_CUE_SPEED_MULTIPLIER = 4.0;
 
     static final class BallResult {
         final Ball source;
@@ -124,8 +126,18 @@ final class PoolPhysics {
     private enum Rail { LEFT, RIGHT, TOP, BOTTOM }
 
     Result simulate(FrameState frame, Vec2 cueDirection, double powerPercent) {
+        return simulate(frame, cueDirection, powerPercent, 1.0);
+    }
+
+    Result simulateBreak(FrameState frame, Vec2 cueDirection, double powerPercent) {
+        return simulate(frame, cueDirection, powerPercent, BREAK_CUE_SPEED_MULTIPLIER);
+    }
+
+    private Result simulate(FrameState frame, Vec2 cueDirection,
+                            double powerPercent, double cueSpeedMultiplier) {
         if (frame == null || frame.table == null || frame.cueBall == null
-                || cueDirection == null || cueDirection.length() < 1e-8) {
+                || cueDirection == null || cueDirection.length() < 1e-8
+                || !Double.isFinite(cueSpeedMultiplier) || cueSpeedMultiplier <= 0.0) {
             return emptyResult();
         }
 
@@ -152,7 +164,8 @@ final class PoolPhysics {
         double pixelsPerMeter = pixelsPerMeter(frame.table);
         // The user's 97.8% slider reading represents maximum power.
         double normalizedPower = Math.min(1.0, power / MAX_UI_POWER_PERCENT);
-        double speed = normalizedPower * MAX_CUE_SPEED_METERS_PER_SECOND * pixelsPerMeter;
+        double speed = normalizedPower * MAX_CUE_SPEED_METERS_PER_SECOND
+                * cueSpeedMultiplier * pixelsPerMeter;
         Vec2 direction = cueDirection.normalized();
         cue.vx = direction.x * speed;
         cue.vy = direction.y * speed;
