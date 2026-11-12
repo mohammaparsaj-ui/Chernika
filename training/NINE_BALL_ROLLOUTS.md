@@ -95,3 +95,6 @@ When direct safety contacts are blocked, the teacher now unfolds the cue-ball pa
 ## Neural training augmentation
 
 The 52-input pocket-ranking policy can now be trained with horizontal, vertical and 180-degree table symmetries. Pocket labels are remapped for each reflection, mirrored angle-offset targets change sign, power targets are preserved, and pocket-coordinate features are reset to the canonical measured anchors. Augmentation is applied only after the train/validation split, so mirrored copies cannot leak into validation.
+
+
+The nine-ball training workflows also reduce the angle/power regression loss weight to 0.25 while keeping the default weight of 2.0 for other imitation tasks. This prioritizes the pocket-ranking head used by the hybrid controller; raw angle/power actions remain experimental and are not approved for live execution.
