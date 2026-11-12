@@ -60,3 +60,27 @@ def test_teacher_rejects_duplicate_object_ball_numbers():
         pass
     else:
         raise AssertionError("duplicate ball numbers must be rejected")
+
+
+
+def test_teacher_can_restrict_search_to_neural_pocket_candidates():
+    cue, balls = _open_bottom_right_state()
+    plan = plan_nine_ball_shot(
+        cue, balls, break_shot=False, pocket_indices=[5]
+    )
+    assert plan is not None
+    assert plan.pocket_index == 5
+    assert plan.assessment.legal_shot is True
+    assert 1 in plan.assessment.pocketed_numbers
+
+
+def test_teacher_rejects_invalid_pocket_candidate_indices():
+    cue, balls = _open_bottom_right_state()
+    try:
+        plan_nine_ball_shot(
+            cue, balls, break_shot=False, pocket_indices=[6]
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid pocket indices must be rejected")
