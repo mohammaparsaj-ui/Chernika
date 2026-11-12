@@ -23,6 +23,20 @@ This is an **offline training project**, separate from the Android APK. It train
 - Reward: target pocketing dominates; legal first contact is rewarded; scratches and off-table events are heavily penalized; a small distance-progress term helps learning.
 - Every episode is one shot. This is a deliberately narrow skill-learning stage, not a full 9-ball policy.
 
+## Phase 2 prototype — multi-ball 9-ball
+
+The repository now includes `ChernikaNineBallEnv`, a separate 52-value practice environment that simulates the cue ball and all active object balls together. Its opening rack matches the Android detector's 1-2-3-2-1 diamond: ball 1 at the front apex, ball 9 in the center, and balls 2–8 shuffled. The environment enforces lowest-ball first contact, scratch/off-table fouls, post-contact rail requirements and the four-distinct-object-ball break requirement. Pocketed balls are removed and the next lowest legal ball is recomputed.
+
+A separate multi-ball physics teacher and 52-input policy are used; do not load the Phase 1 16-input checkpoint as a nine-ball policy. The first dataset uses randomized stationary states with 3–9 object balls and the 9 present. These states are synthetic and are not break-derived or extracted from Plato recordings.
+
+Generate, train and evaluate the nine-ball policy:
+
+    python -m chernika_rl.generate_nine_ball_teacher_data --states 700 --seed 70000
+    python -m chernika_rl.train_imitation --data artifacts/nine_ball_teacher_dataset.npz --epochs 80 --min-demonstrations 50 --output artifacts/nine_ball_policy.pt
+    python -m chernika_rl.evaluate_nine_ball_imitation --model artifacts/nine_ball_policy.pt --episodes 150 --seed 80000
+
+First held-out result: 524 usable teacher demonstrations from 700 sampled states. On 113 of 150 held-out states where the teacher found a legal plan, the physics teacher and neural top-3 + physics hybrid both achieved 32.74% pocket success, 100% legal shots and 100% correct first contact. Raw imitation achieved 3.54% pocket success and 70.80% legal shots. This is a single-shot randomized-state benchmark, not a full-game or live-Plato result.
+
 **Calibration warning:** the Java physics constants are still provisional and based on a small number of Plato replays. The Python mirror is intended to follow the current Java model; it has not yet been cross-validated against a Java golden-output suite and does not claim to reproduce every live-game effect. Spin, throw, masse, ball-in-hand, combinations and multi-rail effects are not included in Phase 1.
 
 ## Install
@@ -94,7 +108,7 @@ For a fair comparison, run every model with the **same seed and episode count**.
 ## Transfer plan — do not skip the gate
 
 1. **Phase 1:** one-ball aiming and power control (this folder).
-2. **Phase 2:** add distractor balls and enforce lowest-ball first contact; train on multi-ball states.
+2. **Phase 2:** multi-ball 9-ball practice environment, shared foul rules, physics teacher and separate 52-input policy are implemented. Next, replace randomized stationary states with validated break-derived and replay-derived positions.
 3. **Phase 3:** add cue-ball positioning, safety play, scratch avoidance, and combinations.
 4. **Phase 4:** compare raw LLM proposals with the trained policy. Use the LLM for high-level target/pocket/shot intent; let the simulator optimize and reject unsafe angle/power values. CueTip is the reference for this separation.
 5. **Phase 5:** export the small policy to ONNX/TFLite only after held-out evaluation, then connect it to the Android gesture adapter.
