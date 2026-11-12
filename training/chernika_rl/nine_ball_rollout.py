@@ -6,6 +6,7 @@ import numpy as np
 
 from .nine_ball_break import BreakPolicy
 from .nine_ball_env import ChernikaNineBallEnv
+from .physics import BREAK_CUE_SPEED_MULTIPLIER
 from .nine_ball_planner import plan_nine_ball_shot_lookahead
 from .nine_ball_teacher import NineBallPlan, plan_nine_ball_shot
 from .imitation import ImitationPolicy, predict_top_pockets
@@ -233,6 +234,7 @@ def run_rack(
         "foul": foul,
         "break_legal": break_legal,
         "break_spread": break_spread,
+        "break_cue_speed_multiplier": BREAK_CUE_SPEED_MULTIPLIER,
         "break_pocketed": break_pocketed,
         "shots": env.shot_count,
         "total_pocketed_balls": total_pocketed,
