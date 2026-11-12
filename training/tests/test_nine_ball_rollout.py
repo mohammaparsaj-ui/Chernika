@@ -69,7 +69,7 @@ def test_rack_summary_reports_win_and_break_metrics():
 def test_legal_no_pot_passes_turn_but_a_legal_pot_retains_it():
     assert _next_player_after_shot(0, True, []) == 1
     assert _next_player_after_shot(1, True, [3]) == 1
-    assert _next_player_after_shot(0, False, []) == 0
+    assert _next_player_after_shot(0, False, []) == 1
 
 
 
