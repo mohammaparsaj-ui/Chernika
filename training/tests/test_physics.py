@@ -51,3 +51,18 @@ def test_simulation_is_deterministic():
 def test_wrap_angle_stays_in_range():
     value = wrap_angle(5.0 * math.pi)
     assert -math.pi <= value <= math.pi
+
+
+def test_aligned_bottom_right_pot_is_detected():
+    target = Ball(430.0, 760.0, 4)
+    pocket = POCKETS[5]
+    dx, dy = pocket.x - target.x, pocket.y - target.y
+    length = math.hypot(dx, dy)
+    ux, uy = dx / length, dy / length
+    ghost_x = target.x - ux * (2 * BALL_RADIUS_PX + 1.0)
+    ghost_y = target.y - uy * (2 * BALL_RADIUS_PX + 1.0)
+    cue = Ball(ghost_x - ux * 200.0, ghost_y - uy * 200.0, 0, cue=True)
+    result = simulate([cue, target], math.atan2(uy, ux), 65.0)
+    assert result.first_contact_number == 4
+    assert result.pocketed(4)
+    assert not result.cue_scratch
