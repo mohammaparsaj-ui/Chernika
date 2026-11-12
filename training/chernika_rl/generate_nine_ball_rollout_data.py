@@ -23,7 +23,7 @@ def generate(
         raise ValueError("depth must be 1 or 2")
 
     env = ChernikaNineBallEnv(max_shots=max_shots)
-    observations, actions, pockets = [], [], []
+    observations, actions, pockets, groups = [], [], [], []
     scores, successes, first_contacts = [], [], []
     legal_breaks = break_fouls = break_wins = no_plan_states = 0
     rack_wins = rack_fouls = 0
@@ -70,6 +70,7 @@ def generate(
             observations.append(observation.copy())
             actions.append(plan.action)
             pockets.append(plan.pocket_index)
+            groups.append(index)
             scores.append(plan_result.total_score)
             successes.append(bool(plan.assessment.pocketed_numbers))
             first_contacts.append(
@@ -95,6 +96,7 @@ def generate(
     metadata = {
         "requested_racks": racks,
         "usable_demonstrations": len(observations),
+        "racks_with_demonstrations": int(len(np.unique(groups))),
         "legal_breaks": legal_breaks,
         "break_fouls": break_fouls,
         "break_wins": break_wins,
@@ -117,6 +119,7 @@ def generate(
         "observations": np.asarray(observations, dtype=np.float32),
         "actions": np.asarray(actions, dtype=np.float32),
         "pockets": np.asarray(pockets, dtype=np.int64),
+        "groups": np.asarray(groups, dtype=np.int64),
         "scores": np.asarray(scores, dtype=np.float32),
         "successes": np.asarray(successes, dtype=np.bool_),
         "first_contacts": np.asarray(first_contacts, dtype=np.bool_),
