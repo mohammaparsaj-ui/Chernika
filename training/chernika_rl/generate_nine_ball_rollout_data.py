@@ -1,4 +1,4 @@
-"""Generate post-break demonstrations from teacher-driven complete-rack rollouts."""
+"""Generate imitation demonstrations from complete, rule-aware nine-ball matches."""
 from __future__ import annotations
 
 import argparse
@@ -6,9 +6,7 @@ import json
 from pathlib import Path
 import numpy as np
 
-from .nine_ball_env import ChernikaNineBallEnv
-from .nine_ball_planner import plan_nine_ball_shot_lookahead
-from .nine_ball_teacher import plan_nine_ball_shot
+from .nine_ball_rollout import run_rack
 
 
 def generate(
@@ -17,120 +15,139 @@ def generate(
     max_shots: int = 24,
     depth: int = 2,
 ) -> dict[str, np.ndarray | dict]:
+    """Generate pot-selection labels from teacher-vs-teacher complete racks.
+
+    Both players use the same physics/lookahead teacher. The shared match
+    controller handles legal turn handoffs, fouls, ball-in-hand placement,
+    9-ball respotting and three-foul losses. Only non-safety pocket attempts
+    become six-class imitation labels; safety actions are executed in the
+    simulated match but deliberately excluded from pocket classification.
+    """
     if racks < 1 or max_shots < 2:
         raise ValueError("racks must be positive and max_shots must be at least 2")
     if depth not in (1, 2):
         raise ValueError("depth must be 1 or 2")
 
-    env = ChernikaNineBallEnv(max_shots=max_shots)
-    observations, actions, pockets, groups = [], [], [], []
-    scores, successes, first_contacts = [], [], []
-    legal_breaks = break_fouls = break_wins = no_plan_states = 0
-    safety_actions = total_post_break_actions = turn_handoffs = 0
-    rack_wins = rack_fouls = 0
-    states_per_rack = []
+    observations: list[list[float]] = []
+    actions: list[list[float]] = []
+    pockets: list[int] = []
+    groups: list[int] = []
+    scores: list[float] = []
+    successes: list[bool] = []
+    first_contacts: list[bool] = []
+
+    legal_breaks = break_fouls = break_wins = 0
+    safety_actions = total_post_break_actions = legal_turn_handoffs = 0
+    rack_wins = rack_losses = rack_fouls = no_plan_states = 0
+    ball_in_hand_placements = nine_respots = three_foul_losses = 0
+    racks_with_demonstrations = 0
+    states_per_rack: list[int] = []
+    status_counts: dict[str, int] = {}
 
     for index in range(racks):
-        rack_seed = seed + index
-        observation, _ = env.reset(seed=rack_seed)
-        break_plan = plan_nine_ball_shot(
-            env.cue, list(env.object_balls.values()), break_shot=True
+        rack = run_rack(
+            seed + index,
+            strategy="teacher_lookahead",
+            opponent_strategy="teacher_lookahead",
+            max_shots=max_shots,
+            depth=depth,
         )
-        if break_plan is None:
-            states_per_rack.append(0)
-            continue
+        status = str(rack["status"])
+        status_counts[status] = status_counts.get(status, 0) + 1
+        rack_wins += int(status == "win")
+        rack_losses += int(status == "three_foul_loss")
+        rack_fouls += int(rack.get("total_fouls", 0) > 0)
+        no_plan_states += int(status == "no_legal_plan")
+        ball_in_hand_placements += int(rack.get("ball_in_hand_placements", 0))
+        nine_respots += int(rack.get("nine_respots", 0))
+        three_foul_losses += int(rack.get("three_foul_loss", False))
 
-        observation, _, terminated, truncated, break_info = env.step(
-            break_plan.action
-        )
-        if break_info["foul"]:
-            break_fouls += 1
-            rack_fouls += 1
-            states_per_rack.append(0)
-            continue
-        legal_breaks += 1
-        if not break_info["pocketed_numbers"]:
-            turn_handoffs += 1
-        if break_info["win"]:
-            break_wins += 1
-            rack_wins += 1
-            states_per_rack.append(0)
-            continue
-        if terminated or truncated:
-            states_per_rack.append(0)
-            continue
+        trajectory = rack.get("trajectory", [])
+        break_record = next((shot for shot in trajectory if shot.get("break")), None)
+        if break_record is not None:
+            legal_breaks += int(bool(break_record.get("legal", False)))
+            break_fouls += int(not bool(break_record.get("legal", False)))
+            break_wins += int(status == "win" and rack.get("shots", 0) == 1)
 
-        rack_states = 0
-        while not terminated and not truncated and env.shot_count < max_shots:
-            plan_result = plan_nine_ball_shot_lookahead(
-                env.cue, list(env.object_balls.values()), depth=depth
-            )
-            if plan_result is None:
-                no_plan_states += 1
-                break
+        rack_demo_count = 0
+        for shot in trajectory:
+            if shot.get("break"):
+                continue
 
-            plan = plan_result.plan
             total_post_break_actions += 1
-            if plan.shot_type.startswith("safety"):
-                safety_actions += 1
-            else:
-                observations.append(observation.copy())
-                actions.append(plan.action)
-                pockets.append(plan.pocket_index)
-                groups.append(index)
-                scores.append(plan_result.total_score)
-                successes.append(bool(plan.assessment.pocketed_numbers))
-                first_contacts.append(
-                    plan.result.first_contact_number == plan.legal_ball
-                )
-                rack_states += 1
+            if shot.get("legal") and not shot.get("pocketed_numbers"):
+                legal_turn_handoffs += 1
 
-            observation, _, terminated, truncated, info = env.step(plan.action)
-            if info["legal_shot"] and not info["pocketed_numbers"]:
-                turn_handoffs += 1
-            if info["foul"]:
-                rack_fouls += 1
-                break
-            if info["win"]:
-                rack_wins += 1
-                break
-        states_per_rack.append(rack_states)
+            shot_type = str(shot.get("shot_type", ""))
+            if shot_type.startswith("safety"):
+                safety_actions += 1
+                continue
+
+            pocket_index = int(shot.get("pocket_index", -1))
+            state = shot.get("observation")
+            action = shot.get("action")
+            if pocket_index < 0 or pocket_index >= 6 or state is None or action is None:
+                continue
+            if len(state) != 52 or len(action) != 2:
+                raise ValueError(
+                    f"invalid teacher record dimensions in rack {seed + index}: "
+                    f"state={len(state) if state is not None else None}, "
+                    f"action={len(action) if action is not None else None}"
+                )
+
+            observations.append([float(value) for value in state])
+            actions.append([float(value) for value in action])
+            pockets.append(pocket_index)
+            groups.append(index)
+            scores.append(float(shot.get("lookahead_score") or shot.get("immediate_score", 0.0)))
+            successes.append(bool(shot.get("pocketed_numbers")))
+            first_contacts.append(
+                shot.get("first_contact") == shot.get("legal_ball")
+            )
+            rack_demo_count += 1
+
+        states_per_rack.append(rack_demo_count)
+        racks_with_demonstrations += int(rack_demo_count > 0)
 
     if not observations:
         raise RuntimeError(
-            "No post-break teacher demonstrations were generated; "
-            "inspect legal break and direct-shot availability"
+            "No post-break pot demonstrations were generated from complete racks; "
+            "inspect break legality, teacher shot coverage and match termination."
         )
 
     metadata = {
         "requested_racks": racks,
         "usable_demonstrations": len(observations),
-        "racks_with_demonstrations": int(len(np.unique(groups))),
+        "racks_with_demonstrations": racks_with_demonstrations,
         "legal_breaks": legal_breaks,
         "break_fouls": break_fouls,
         "break_wins": break_wins,
-        "rack_wins": rack_wins,
-        "rack_fouls": rack_fouls,
+        "rack_9ball_wins": rack_wins,
+        "three_foul_losses": three_foul_losses,
+        "rack_three_foul_losses": rack_losses,
+        "racks_with_any_foul": rack_fouls,
         "states_without_any_legal_plan": no_plan_states,
-        "safety_actions_excluded_from_pocket_imitation": safety_actions,
+        "safety_actions_executed_but_excluded": safety_actions,
         "total_post_break_actions": total_post_break_actions,
-        "legal_turn_handoffs": turn_handoffs,
+        "legal_no_pot_turn_handoffs": legal_turn_handoffs,
+        "ball_in_hand_placements": ball_in_hand_placements,
+        "nine_ball_respots": nine_respots,
+        "status_counts": status_counts,
         "mean_pot_demonstrations_per_rack": float(np.mean(states_per_rack)),
         "teacher_pot_demonstration_rate": (
             len(observations) / max(1, total_post_break_actions)
         ),
-        "seed_start": seed,
-        "max_shots": max_shots,
-        "teacher_lookahead_depth": depth,
-        "teacher_pot_rate": len(observations) / max(1, total_post_break_actions),
         "pot_success_rate_on_labeled_samples": float(np.mean(successes)),
         "teacher_first_contact_rate": float(np.mean(first_contacts)),
         "observation_size": 52,
+        "seed_start": seed,
+        "max_shots": max_shots,
+        "teacher_lookahead_depth": depth,
         "state_distribution": (
-            "post-break states reached by legal physics-teacher breaks and "
-            "teacher self-play with legal no-pot turn handoffs on seeded "
-            "1-2-3-2-1 diamond racks; safety actions are executed but excluded "
-            "from the six-pocket imitation labels"
+            "complete seeded 1-2-3-2-1 diamond racks generated by the shared "
+            "match controller with teacher-vs-teacher play; legal misses pass "
+            "the turn, fouls trigger ball-in-hand, the 9-ball is respotted when "
+            "required, and three consecutive fouls lose the rack"
         ),
     }
     return {
@@ -163,7 +180,7 @@ def main():
     np.savez_compressed(output, **dataset)
     output.with_suffix(".json").write_text(json.dumps(metadata, indent=2))
     print(json.dumps(metadata, indent=2))
-    print(f"Saved post-break rollout demonstrations to {output}")
+    print(f"Saved complete-rack demonstrations to {output}")
 
 
 if __name__ == "__main__":
