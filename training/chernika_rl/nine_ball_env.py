@@ -136,7 +136,7 @@ class ChernikaNineBallEnv(gym.Env):
         return self._last_obs.copy()
 
     def respot_nine_ball(self) -> tuple[float, float] | None:
-        """Spot a missing 9-ball on the foot spot, searching down-table first."""
+        """Spot a missing 9-ball on the foot spot, searching toward the foot rail first."""
         if 9 in self.object_balls:
             return None
 
@@ -156,10 +156,10 @@ class ChernikaNineBallEnv(gym.Env):
             return True
 
         # WPA spotting order: as close as possible to the foot spot, first
-        # between the foot spot and foot rail, then above the foot spot.
+        # between the foot spot and foot rail, then toward the head rail.
         max_steps = int(TABLE_HEIGHT_PX)
         chosen = None
-        for direction in (1.0, -1.0):
+        for direction in (-1.0, 1.0):
             for step in range(max_steps + 1):
                 y = foot_y + direction * step
                 if clear(foot_x, y):
