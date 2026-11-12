@@ -179,7 +179,7 @@ def _next_player_after_shot(
     pocketed_numbers: list[int] | tuple[int, ...],
 ) -> int:
     """Keep the turn after a legal pot; otherwise pass it to the opponent."""
-    if not legal_shot or pocketed_numbers:
+    if legal_shot and pocketed_numbers:
         return current_player
     return 1 - current_player
 
