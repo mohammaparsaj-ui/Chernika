@@ -122,7 +122,8 @@ def generate(
         "seed_start": seed,
         "max_shots": max_shots,
         "teacher_lookahead_depth": depth,
-        "teacher_pot_rate": float(np.mean(successes)),
+        "teacher_pot_rate": len(observations) / max(1, total_post_break_actions),
+        "pot_success_rate_on_labeled_samples": float(np.mean(successes)),
         "teacher_first_contact_rate": float(np.mean(first_contacts)),
         "observation_size": 52,
         "state_distribution": (

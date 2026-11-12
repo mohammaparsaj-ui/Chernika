@@ -330,7 +330,7 @@ def summarize_racks(rows: list[dict[str, Any]]) -> dict[str, Any]:
             row["neural_fallback_count"] for row in rows
         ])),
         "mean_safety_shots_per_rack": float(np.mean([
-            sum(shot.get("shot_type") == "safety" for shot in row["trajectory"])
+            sum(shot.get("shot_type") == "safety" for shot in row.get("trajectory", []))
             for row in rows
         ])),
         "mean_turn_switches": float(np.mean([
