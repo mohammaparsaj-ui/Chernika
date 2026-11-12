@@ -10,6 +10,7 @@ def test_break_diagnostic_reports_legal_and_spread_metrics():
     )
 
     assert report["racks"] == 1
+    assert "mean_best_valid_contact_collisions" in report
     assert report["racks_with_correct_first_contact"] in (0, 1)
     assert report["racks_with_legal_break_candidate"] in (0, 1)
     assert 0.0 <= report["legal_break_candidate_rate"] <= 1.0
