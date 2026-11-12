@@ -147,15 +147,45 @@ def main():
                         help="LLM calls are billable; default is intentionally small")
     parser.add_argument("--seed", type=int, default=20_000)
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument("--sac-model", default=None,
+                        help="Optional trained SAC checkpoint for same-state comparison")
     parser.add_argument("--output", default="artifacts/llm_benchmark.json")
     args = parser.parse_args()
 
     model_name, provider_kwargs = _provider_config(args.provider, args.model)
+    sac_model = None
+    if args.sac_model:
+        from stable_baselines3 import SAC
+        sac_model = SAC.load(args.sac_model)
+
     env = ChernikaSingleBallEnv()
     rows = []
     for i in range(args.episodes):
-        env.reset(seed=args.seed + i)
+        seed = args.seed + i
+        env.reset(seed=seed)
         prompt = _state_prompt(env)
+
+        # Score the heuristic and optional trained SAC policy on this exact state.
+        heuristic_action = env.heuristic_action()
+        _, heuristic_reward, _, _, heuristic_info = env.step(heuristic_action)
+        baseline = {
+            "heuristic_success": bool(heuristic_info["success"]),
+            "heuristic_reward": float(heuristic_reward),
+            "heuristic_scratch": bool(heuristic_info["cue_scratch"]),
+        }
+        sac_baseline = {}
+        if sac_model is not None:
+            obs, _ = env.reset(seed=seed)
+            sac_action, _ = sac_model.predict(obs, deterministic=True)
+            _, sac_reward, _, _, sac_info = env.step(sac_action)
+            sac_baseline = {
+                "sac_success": bool(sac_info["success"]),
+                "sac_reward": float(sac_reward),
+                "sac_scratch": bool(sac_info["cue_scratch"]),
+            }
+
+        # Reset to the same seeded state before the raw LLM gets its one attempt.
+        env.reset(seed=seed)
         started = time.perf_counter()
         try:
             raw, latency, usage = _call_model(model_name, provider_kwargs, prompt, args.timeout)
@@ -174,12 +204,14 @@ def main():
                                2.0 * power / MAX_UI_POWER_PERCENT - 1.0], dtype=np.float32)
             _, reward, _, _, info = env.step(action)
             row = {
-                "seed": args.seed + i,
+                "seed": seed,
                 "valid": True,
                 "selected_pocket": parsed.get("pocket"),
                 "raw_output": raw,
                 "reward": reward,
                 "latency_seconds": latency,
+                **baseline,
+                **sac_baseline,
                 **usage,
                 **info,
             }
@@ -189,11 +221,13 @@ def main():
             action = np.array([0.0, -1.0], dtype=np.float32)
             _, reward, _, _, info = env.step(action)
             row = {
-                "seed": args.seed + i,
+                "seed": seed,
                 "valid": False,
                 "error": str(exc),
                 "reward": reward,
                 "latency_seconds": time.perf_counter() - started,
+                **baseline,
+                **sac_baseline,
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 **info,
@@ -209,6 +243,10 @@ def main():
         "episodes": len(rows),
         "valid_output_rate": sum(r["valid"] for r in rows) / n,
         "pocket_rate": sum(bool(r["success"]) for r in rows) / n,
+        "heuristic_pocket_rate_same_states": sum(r["heuristic_success"] for r in rows) / n,
+        "sac_pocket_rate_same_states": (
+            sum(r["sac_success"] for r in rows) / n if sac_model is not None else None
+        ),
         "first_contact_rate": sum(r["first_contact"] == 1 for r in rows) / n,
         "scratch_rate": sum(bool(r["cue_scratch"]) for r in rows) / n,
         "off_table_rate": sum(bool(r["off_table"]) for r in rows) / n,
