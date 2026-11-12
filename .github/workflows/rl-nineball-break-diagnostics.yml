@@ -24,8 +24,8 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: training/pyproject.toml
-      - name: Install training package
-        run: python -m pip install -e 'training[dev]'
+      - name: Install minimal simulator dependencies
+        run: python -m pip install numpy gymnasium
       - name: Diagnose candidate angles and power
         working-directory: training
         run: |
