@@ -98,6 +98,17 @@ def _choose_plan(
 
 
 
+def _record_foul(consecutive_fouls: list[int], player: int) -> bool:
+    """Increment one player's consecutive-foul count and report a rack loss."""
+    consecutive_fouls[player] += 1
+    return consecutive_fouls[player] >= 3
+
+
+def _record_legal_shot(consecutive_fouls: list[int], player: int) -> None:
+    """A legal shot clears only the shooter's own consecutive-foul streak."""
+    consecutive_fouls[player] = 0
+
+
 def _ball_in_hand_candidates(env: ChernikaNineBallEnv) -> list[tuple[float, float]]:
     """Small deterministic placement set: cloth grid plus six potting ghost points."""
     radius = BALL_RADIUS_PX
@@ -233,8 +244,7 @@ def run_rack(
     def recover_foul(fouling_player: int) -> tuple[np.ndarray, tuple[float, float] | None, tuple[float, float] | None]:
         nonlocal current_player, turn_switches, ball_in_hand_placements, nine_respots
         foul_counts[fouling_player] += 1
-        consecutive_fouls[fouling_player] += 1
-        if consecutive_fouls[fouling_player] >= 3:
+        if _record_foul(consecutive_fouls, fouling_player):
             current_player = 1 - fouling_player
             return observation, None, None
 
@@ -315,7 +325,7 @@ def run_rack(
         elif terminated:
             status = "rack_ended_without_win"
         else:
-            consecutive_fouls[0] = 0
+            _record_legal_shot(consecutive_fouls, 0)
             next_player = _next_player_after_shot(
                 0, info["legal_shot"], info["pocketed_numbers"]
             )
@@ -390,7 +400,7 @@ def run_rack(
         elif truncated:
             status = "max_shots"
         else:
-            consecutive_fouls[current_player] = 0
+            _record_legal_shot(consecutive_fouls, current_player)
             next_player = _next_player_after_shot(
                 current_player, info["legal_shot"], info["pocketed_numbers"]
             )
