@@ -60,6 +60,7 @@ def main():
     comparisons = 0
     hybrid_fallbacks = 0
     skipped_states = 0
+    safety_teacher_states = 0
 
     for index in range(args.episodes):
         state_seed = args.seed + index
@@ -74,12 +75,16 @@ def main():
         imitation_action, ranked_pockets = predict_top_pockets(
             policy, observation, top_k=TOP_K
         )
-        comparisons += 1
-        pocket_recall += int(teacher_plan.pocket_index in ranked_pockets)
+        if teacher_plan.shot_type.startswith("safety"):
+            safety_teacher_states += 1
+        else:
+            comparisons += 1
+            pocket_recall += int(teacher_plan.pocket_index in ranked_pockets)
 
         candidate_plans = [
             plan_nine_ball_shot(
-                cue, balls, break_shot=False, pocket_indices=[pocket_index]
+                cue, balls, break_shot=False,
+                pocket_indices=[pocket_index], allow_safety=False,
             )
             for pocket_index in ranked_pockets
         ]
@@ -91,7 +96,12 @@ def main():
                 candidate_plans, key=lambda candidate: candidate.score
             ).action
         else:
-            hybrid_action = imitation_action
+            fallback_plan = plan_nine_ball_shot(
+                cue, balls, break_shot=False, allow_safety=True
+            )
+            hybrid_action = (
+                fallback_plan.action if fallback_plan is not None else imitation_action
+            )
             hybrid_fallbacks += 1
 
         actions = {
@@ -130,7 +140,8 @@ def main():
         "results": {name: _metrics(values) for name, values in rows.items()},
         "teacher_agreement": {
             "top3_pocket_recall": pocket_recall / max(1, comparisons),
-            "states_with_teacher_plan": comparisons,
+            "states_with_teacher_pot_plan": comparisons,
+            "states_with_teacher_safety_plan": safety_teacher_states,
         },
         "hybrid": {
             "controller": (

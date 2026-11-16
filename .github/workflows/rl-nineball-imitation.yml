@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'training/chernika_rl/nine_ball_*.py'
+      - 'training/chernika_rl/export_nine_ball_policy.py'
       - 'training/chernika_rl/nine_ball_data.py'
       - 'training/chernika_rl/imitation.py'
       - 'training/chernika_rl/train_imitation.py'
@@ -43,6 +44,10 @@ jobs:
         working-directory: training
         run: |
           python -m chernika_rl.evaluate_nine_ball_imitation --model artifacts/nine_ball_policy.pt --episodes 150 --seed 80000 --output artifacts/nine_ball_evaluation.json
+      - name: Export Android-compatible policy binary
+        working-directory: training
+        run: |
+          python -m chernika_rl.export_nine_ball_policy --model artifacts/nine_ball_policy.pt --output artifacts/nine_ball_policy.bin
       - name: Upload nine-ball dataset, model and evaluation
         uses: actions/upload-artifact@v4
         with:
@@ -51,6 +56,7 @@ jobs:
             training/artifacts/nine_ball_teacher_dataset.npz
             training/artifacts/nine_ball_teacher_dataset.json
             training/artifacts/nine_ball_policy.pt
+            training/artifacts/nine_ball_policy.bin
             training/artifacts/nine_ball_policy.metrics.json
             training/artifacts/nine_ball_evaluation.json
           if-no-files-found: error

@@ -12,6 +12,38 @@ from torch.utils.data import DataLoader, TensorDataset
 from .imitation import ImitationPolicy, POCKET_COUNT
 
 
+def _split_indices(
+    sample_count: int,
+    seed: int,
+    groups: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """Split by rack when group labels exist, preventing adjacent-state leakage."""
+    rng = np.random.default_rng(seed)
+    if groups is not None:
+        groups = np.asarray(groups)
+        if groups.shape != (sample_count,):
+            raise ValueError("groups must contain one rack ID per demonstration")
+        unique_groups = np.unique(groups)
+        if len(unique_groups) >= 2:
+            rng.shuffle(unique_groups)
+            validation_group_count = max(1, int(round(len(unique_groups) * 0.10)))
+            validation_group_count = min(validation_group_count, len(unique_groups) - 1)
+            validation_groups = unique_groups[:validation_group_count]
+            validation_mask = np.isin(groups, validation_groups)
+            train_ids = np.flatnonzero(~validation_mask)
+            validation_ids = np.flatnonzero(validation_mask)
+            if len(train_ids) and len(validation_ids):
+                return train_ids, validation_ids, "rack_grouped"
+
+    order = rng.permutation(sample_count)
+    split = max(1, int(sample_count * 0.90))
+    train_ids, validation_ids = order[:split], order[split:]
+    if len(validation_ids) == 0:
+        validation_ids = train_ids[-1:]
+        train_ids = train_ids[:-1]
+    return train_ids, validation_ids, "random_sample"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="artifacts/teacher_dataset.npz")
@@ -32,6 +64,7 @@ def main():
     pockets = data["pockets"].astype(np.int64)
     successes = data["successes"].astype(np.float32)
     first_contacts = data["first_contacts"].astype(np.float32)
+    groups = data["groups"].astype(np.int64) if "groups" in data.files else None
 
     if len(observations) < args.min_demonstrations:
         raise ValueError(
@@ -47,20 +80,17 @@ def main():
     if np.any(pockets < 0) or np.any(pockets >= POCKET_COUNT):
         raise ValueError("Pocket labels must be integers in [0, 5]")
 
-    order = np.random.permutation(len(observations))
-    split = max(1, int(len(order) * 0.90))
-    train_ids, validation_ids = order[:split], order[split:]
-    if len(validation_ids) == 0:
-        validation_ids = train_ids[-1:]
-        train_ids = train_ids[:-1]
-
+    train_ids, validation_ids, split_strategy = _split_indices(
+        len(observations), args.seed, groups
+    )
     x = torch.from_numpy(observations)
     y_action = torch.from_numpy(actions)
     y_pocket = torch.from_numpy(pockets)
     weights = torch.from_numpy(1.0 + 2.0 * successes + 0.5 * first_contacts)
 
-    train_ds = TensorDataset(x[train_ids], y_action[train_ids],
-                             y_pocket[train_ids], weights[train_ids])
+    train_ds = TensorDataset(
+        x[train_ids], y_action[train_ids], y_pocket[train_ids], weights[train_ids]
+    )
     loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
 
     model = ImitationPolicy(
@@ -99,8 +129,9 @@ def main():
             val_pocket_loss = classification_loss(
                 validation_output[:, :POCKET_COUNT], y_pocket[validation_ids]
             )
-            val_action_loss = ((validation_output[:, POCKET_COUNT:]
-                                - y_action[validation_ids]) ** 2).mean()
+            val_action_loss = (
+                (validation_output[:, POCKET_COUNT:] - y_action[validation_ids]) ** 2
+            ).mean()
             val_loss = float((val_pocket_loss + 2.0 * val_action_loss).item())
             pocket_accuracy = float(
                 (validation_output[:, :POCKET_COUNT].argmax(dim=1)
@@ -120,8 +151,10 @@ def main():
         })
         if val_loss < best_validation:
             best_validation = val_loss
-            best_state = {k: v.detach().cpu().clone()
-                          for k, v in model.state_dict().items()}
+            best_state = {
+                key: value.detach().cpu().clone()
+                for key, value in model.state_dict().items()
+            }
 
     if best_state is None:
         raise RuntimeError("Training failed to produce a checkpoint")
@@ -138,6 +171,13 @@ def main():
             "demonstrations": int(len(observations)),
             "epochs": args.epochs,
             "seed": args.seed,
+            "split_strategy": split_strategy,
+            "training_racks": (
+                int(len(np.unique(groups[train_ids]))) if groups is not None else None
+            ),
+            "validation_racks": (
+                int(len(np.unique(groups[validation_ids]))) if groups is not None else None
+            ),
             "best_validation_loss": best_validation,
             "best_validation_pocket_accuracy": max(
                 row["validation_pocket_accuracy"] for row in history
@@ -152,6 +192,7 @@ def main():
     )
     print(json.dumps({
         "demonstrations": len(observations),
+        "split_strategy": split_strategy,
         "best_validation_loss": best_validation,
         "best_validation_pocket_accuracy": max(
             row["validation_pocket_accuracy"] for row in history

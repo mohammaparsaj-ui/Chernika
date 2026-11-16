@@ -30,7 +30,7 @@ def test_multi_ball_teacher_finds_a_legal_lowest_ball_pot():
     assert plan.result.first_contact_number == 1
 
 
-def test_break_teacher_only_targets_the_one_ball():
+def test_break_teacher_uses_a_legal_plato_break_contact():
     env = ChernikaNineBallEnv()
     env.reset(seed=20261121)
     assert env.cue is not None
@@ -42,7 +42,7 @@ def test_break_teacher_only_targets_the_one_ball():
         assert plan.break_shot is True
         assert plan.pocket_index == -1
         assert plan.assessment.legal_shot is True
-        assert plan.result.first_contact_number == 1
+        assert plan.result.first_contact_number is not None
 
 
 def test_break_teacher_refuses_a_rack_without_ball_one():

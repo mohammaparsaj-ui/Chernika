@@ -33,6 +33,13 @@ DT = 1.0 / 240.0
 MAX_SIM_SECONDS = 40.0
 MIN_MOVING_SPEED_PER_RADIUS = 0.05
 MIN_COLLISION_SPEED_PER_RADIUS = 0.08
+# Dense racks create simultaneous contacts. Revisit the pairs so collision
+# propagation does not depend on the arbitrary ball-number iteration order.
+BALL_COLLISION_ITERATIONS = 4
+# Provisional break-only scale: 0.66 m/s was fitted to ordinary shots, while
+# earlier Plato replay estimates reached about 2.67 m/s at maximum power.
+# Keep normal shots unchanged and refine this against the original break clip.
+BREAK_CUE_SPEED_MULTIPLIER = 4.0
 
 @dataclass(frozen=True)
 class Pocket:
@@ -87,6 +94,8 @@ class SimulationResult:
     any_ball_off_table: bool
     post_contact_cushion_contacts: int = 0
     post_contact_cushion_ball_numbers: tuple[int, ...] = ()
+    post_contact_object_ball_cushion_contacts: int = 0
+    cue_pre_contact_cushion_contacts: int = 0
 
     def pocketed(self, number: int) -> bool:
         return any(o.number == number and not o.cue and o.pocketed for o in self.outcomes)
@@ -199,8 +208,16 @@ def _resolve_rails(body: _Body) -> int:
     return contacts
 
 
-def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) -> SimulationResult:
-    """Simulate one shot. angle_radians is the absolute screen-space direction."""
+def simulate(
+    balls: Iterable[Ball],
+    angle_radians: float,
+    power_percent: float,
+    *,
+    cue_speed_multiplier: float = 1.0,
+) -> SimulationResult:
+    """Simulate one shot; multiplier is an explicit calibration hook for break tests."""
+    if not math.isfinite(cue_speed_multiplier) or cue_speed_multiplier <= 0.0:
+        raise ValueError("cue_speed_multiplier must be finite and positive")
     sources = list(balls)
     cue_index = next((i for i, b in enumerate(sources) if b.cue), None)
     if cue_index is None or not math.isfinite(angle_radians):
@@ -211,7 +228,10 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
     power = max(0.0, min(100.0, float(power_percent)))
     normalized_power = min(1.0, power / MAX_UI_POWER_PERCENT)
     pixels_per_meter = _pixels_per_meter()
-    speed = normalized_power * MAX_CUE_SPEED_MPS * pixels_per_meter
+    speed = (
+        normalized_power * MAX_CUE_SPEED_MPS
+        * float(cue_speed_multiplier) * pixels_per_meter
+    )
     cue.vx = math.cos(angle_radians) * speed
     cue.vy = math.sin(angle_radians) * speed
 
@@ -221,6 +241,8 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
     first_contact: int | None = None
     collisions = cushion_contacts = 0
     post_contact_cushion_contacts = 0
+    post_contact_object_ball_cushion_contacts = 0
+    cue_pre_contact_cushion_contacts = 0
     post_contact_cushion_ball_numbers: set[int] = set()
     elapsed = 0.0
     max_steps = math.ceil(MAX_SIM_SECONDS / DT)
@@ -237,39 +259,42 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
         if not any_moving and step > 0:
             break
 
-        # Equal-mass ball-ball collision resolution; preserves Java event order.
-        for i, a in enumerate(bodies):
-            if not a.active():
-                continue
-            for b in bodies[i + 1:]:
-                if not b.active():
+        # Equal-mass ball-ball collision resolution. Multiple passes are
+        # required for dense rack contacts; one pass made energy propagation
+        # depend on the arbitrary order of numbered balls.
+        for _ in range(BALL_COLLISION_ITERATIONS):
+            for i, a in enumerate(bodies):
+                if not a.active():
                     continue
-                dx, dy = b.x - a.x, b.y - a.y
-                min_distance = a.radius + b.radius
-                distance_squared = dx * dx + dy * dy
-                if distance_squared >= min_distance * min_distance:
-                    continue
-                distance = math.sqrt(max(1e-12, distance_squared))
-                nx, ny = ((1.0, 0.0) if distance < 1e-6 else (dx / distance, dy / distance))
-                overlap = min_distance - distance
-                correction = overlap * 0.5 + 0.002
-                a.x -= nx * correction
-                a.y -= ny * correction
-                b.x += nx * correction
-                b.y += ny * correction
-                relative_normal_speed = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny
-                if relative_normal_speed < -collision_speed:
-                    impulse = -(1.0 + BALL_RESTITUTION) * relative_normal_speed * 0.5
-                    a.vx -= nx * impulse
-                    a.vy -= ny * impulse
-                    b.vx += nx * impulse
-                    b.vy += ny * impulse
-                    collisions += 1
-                    if first_contact is None:
-                        if a.source.cue and not b.source.cue:
-                            first_contact = b.source.number
-                        elif b.source.cue and not a.source.cue:
-                            first_contact = a.source.number
+                for b in bodies[i + 1:]:
+                    if not b.active():
+                        continue
+                    dx, dy = b.x - a.x, b.y - a.y
+                    min_distance = a.radius + b.radius
+                    distance_squared = dx * dx + dy * dy
+                    if distance_squared >= min_distance * min_distance:
+                        continue
+                    distance = math.sqrt(max(1e-12, distance_squared))
+                    nx, ny = ((1.0, 0.0) if distance < 1e-6 else (dx / distance, dy / distance))
+                    overlap = min_distance - distance
+                    correction = overlap * 0.5 + 0.002
+                    a.x -= nx * correction
+                    a.y -= ny * correction
+                    b.x += nx * correction
+                    b.y += ny * correction
+                    relative_normal_speed = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny
+                    if relative_normal_speed < -collision_speed:
+                        impulse = -(1.0 + BALL_RESTITUTION) * relative_normal_speed * 0.5
+                        a.vx -= nx * impulse
+                        a.vy -= ny * impulse
+                        b.vx += nx * impulse
+                        b.vy += ny * impulse
+                        collisions += 1
+                        if first_contact is None:
+                            if a.source.cue and not b.source.cue:
+                                first_contact = b.source.number
+                            elif b.source.cue and not a.source.cue:
+                                first_contact = a.source.number
 
         for body in bodies:
             if not body.active():
@@ -280,10 +305,17 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
                 continue
             rail_contacts = _resolve_rails(body)
             cushion_contacts += rail_contacts
-            if first_contact is not None and rail_contacts > 0:
-                post_contact_cushion_contacts += rail_contacts
-                if not body.source.cue:
-                    post_contact_cushion_ball_numbers.add(body.source.number)
+            if rail_contacts > 0:
+                if first_contact is None:
+                    # Plato accepts a cue-ball cushion contact even when it
+                    # happens before the first object-ball contact.
+                    if body.source.cue:
+                        cue_pre_contact_cushion_contacts += rail_contacts
+                else:
+                    post_contact_cushion_contacts += rail_contacts
+                    if not body.source.cue:
+                        post_contact_object_ball_cushion_contacts += rail_contacts
+                        post_contact_cushion_ball_numbers.add(body.source.number)
             if not body.active():
                 continue
             if (body.x < TABLE_LEFT - body.radius or body.x > TABLE_RIGHT + body.radius
@@ -313,6 +345,8 @@ def simulate(balls: Iterable[Ball], angle_radians: float, power_percent: float) 
         elapsed, cue_scratch, any_off_table,
         post_contact_cushion_contacts,
         tuple(sorted(post_contact_cushion_ball_numbers)),
+        post_contact_object_ball_cushion_contacts,
+        cue_pre_contact_cushion_contacts,
     )
 
 
