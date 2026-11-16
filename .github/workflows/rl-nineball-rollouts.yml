@@ -27,12 +27,56 @@ on:
       - '.github/workflows/rl-nineball-rollouts.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
-  group: chernika-nineball-rollouts-pr
+  group: chernika-nineball-rollouts-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      training: ${{ steps.filter.outputs.training }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            training:
+              - 'training/chernika_rl/nine_ball_*.py'
+              - 'training/chernika_rl/export_nine_ball_policy.py'
+              - 'training/chernika_rl/physics.py'
+              - 'training/chernika_rl/generate_nine_ball_break_data.py'
+              - 'training/chernika_rl/train_nine_ball_break.py'
+              - 'training/chernika_rl/evaluate_nine_ball_break.py'
+              - 'training/chernika_rl/generate_nine_ball_rollout_data.py'
+              - 'training/chernika_rl/evaluate_nine_ball_rollouts.py'
+              - 'training/chernika_rl/imitation.py'
+              - 'training/chernika_rl/train_imitation.py'
+              - 'training/tests/test_nine_ball_*.py'
+              - 'training/pyproject.toml'
+            android:
+              - 'app/src/main/java/com/cherunika/chernika/PoolPhysics.java'
+              - 'app/src/main/java/com/cherunika/chernika/NineBallRules.java'
+              - 'app/src/main/java/com/cherunika/chernika/PlatoTableCalibration.java'
+              - 'app/src/main/java/com/cherunika/chernika/ShotPlanner.java'
+              - 'app/src/main/java/com/cherunika/chernika/ChernikaAccessibilityService.java'
+              - 'app/src/main/java/com/cherunika/chernika/NineBallObservationEncoder.java'
+              - 'app/src/main/java/com/cherunika/chernika/NineBallImitationPolicy.java'
+              - 'app/src/main/java/com/cherunika/chernika/MatchPpoPolicy.java'
+              - 'app/src/test/**'
+              - 'app/build.gradle'
+              - 'build.gradle'
+              - 'settings.gradle'
+
   nineball-rollouts:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.training == 'true'
     runs-on: ubuntu-latest
     # The 60-rack, depth-2 teacher rollout generator alone used ~38 minutes
     # in the previous run; the full pipeline needs room for training/evaluation.
@@ -170,3 +214,33 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+  android-tests:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 9.8.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
+      - name: Configure Android SDK
+        run: |
+          set -euo pipefail
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;36.0.0" "platform-tools"
+      - name: Compile Android and run unit tests
+        run: gradle :app:testDebugUnitTest :app:compileDebugJavaWithJavac --no-daemon --stacktrace
