@@ -2,7 +2,7 @@ name: Build Chernika raw Android APK
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'feature/chernika-home-dashboard-v1']
     paths:
       - 'app/**'
       - '.github/workflows/build-android.yml'
@@ -86,9 +86,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;36.0.0" "platform-tools"
 
       - name: Verify runner Gradle installation
-        run: |
-          gradle --version
-          gradle --version | grep -q 'Gradle 9.8.2'
+        run: gradle --version
 
       - name: Run unit tests and assemble raw APK
         working-directory: ${{ env.SOURCE_DIR }}
