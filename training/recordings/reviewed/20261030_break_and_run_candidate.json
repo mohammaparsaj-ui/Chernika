@@ -3,13 +3,14 @@
   "recording_id": "plato_9ball_20261030_win_01",
   "source": {
     "kind": "user-provided-screen-recording",
-    "filename": "XRecorder_20261030_01.mp4",
+    "filename": "XRecorder_20261030_01(1).mp4",
     "duration_seconds": 76.18,
     "resolution": [
       720,
       1216
     ],
-    "raw_video_committed": false
+    "raw_video_committed": false,
+    "sha256": "2796588197bc75f3d998fc1c65ecd779165851222b4658a09dcb4bb87d1f826d"
   },
   "review": {
     "status": "manual_visual_candidate",
@@ -83,7 +84,8 @@
       ]
     ],
     "break_pocketed_numbers_evidence": "The UI reports two balls pocketed; the post-break table visibly contains balls 1, 2, 3, 6, 7, 8 and 9, so 4 and 5 are inferred absent.",
-    "foul_notifications_observed": "none_visible_in_reviewed_frames"
+    "foul_notifications_observed": "none_visible_in_reviewed_frames",
+    "observation_schema_size": 52
   },
   "shots": [
     {
@@ -222,7 +224,7 @@
       "pre_shot_shot_count": 2,
       "action_estimate": {
         "angle_offset_normalized": 0.0331,
-        "power_normalized": 0.017,
+        "power_normalized": 0.0172,
         "derived_from": "reviewed cue centre, legal-ball centre, Plato aim marker and vertical power marker",
         "simulator_training_label": false
       },
@@ -279,7 +281,7 @@
       "pre_shot_shot_count": 3,
       "action_estimate": {
         "angle_offset_normalized": -0.0342,
-        "power_normalized": -0.037,
+        "power_normalized": -0.0369,
         "derived_from": "reviewed cue centre, legal-ball centre, Plato aim marker and vertical power marker",
         "simulator_training_label": false
       },
@@ -467,7 +469,7 @@
       "pre_shot_shot_count": 7,
       "action_estimate": {
         "angle_offset_normalized": -0.0282,
-        "power_normalized": 0.243,
+        "power_normalized": 0.2432,
         "derived_from": "reviewed cue centre, legal-ball centre, Plato aim marker and vertical power marker",
         "simulator_training_label": false
       },
