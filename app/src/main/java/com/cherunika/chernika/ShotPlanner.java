@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class ShotPlanner {
+    static final double MAX_UI_POWER_PERCENT = 97.8;
     private final DiamondRackDetector rackDetector = new DiamondRackDetector();
     private final PhysicsShotEvaluator physicsEvaluator = new PhysicsShotEvaluator();
     private final NineBallImitationPolicy imitationPolicy;
@@ -31,8 +32,10 @@ final class ShotPlanner {
         }
         if (target == null) return null;
 
-        int[] preferredPocketIndices = preferredPocketIndices(
+        NineBallImitationPolicy.Prediction neuralPrediction = policyPrediction(
                 frame, legalBall, objectiveBall, shotCount);
+        int[] preferredPocketIndices = neuralPrediction == null
+                ? null : neuralPrediction.rankedPocketIndices;
 
         if (objectiveBall == 9 && legalBall != 9) {
             Ball nine = null;
@@ -75,11 +78,11 @@ final class ShotPlanner {
             // neural top-3 has no geometrically feasible candidate.
             if (!neuralCandidates.isEmpty()) candidates = neuralCandidates;
         }
-        return rankWithPhysics(frame, candidates, legalBall, objectiveBall);
+        return rankWithPhysics(frame, candidates, legalBall, objectiveBall, neuralPrediction);
     }
 
-    int[] preferredPocketIndices(FrameState frame, int legalBall,
-                                         int objectiveBall, int shotCount) {
+    NineBallImitationPolicy.Prediction policyPrediction(
+            FrameState frame, int legalBall, int objectiveBall, int shotCount) {
         if (imitationPolicy == null || frame == null || frame.table == null
                 || (objectiveBall == 9 && legalBall != 9)) {
             return null;
@@ -87,12 +90,19 @@ final class ShotPlanner {
         try {
             float[] observation = NineBallObservationEncoder.encode(
                     frame, legalBall, false, shotCount);
-            return imitationPolicy.predict(observation, 3).rankedPocketIndices;
+            return imitationPolicy.predict(observation, 3);
         } catch (IllegalArgumentException | IllegalStateException ignored) {
             // Vision may leave an object-ball identity unresolved for this
             // frame. Never let uncertain OCR disable the geometric fallback.
             return null;
         }
+    }
+
+    int[] preferredPocketIndices(FrameState frame, int legalBall,
+                                 int objectiveBall, int shotCount) {
+        NineBallImitationPolicy.Prediction prediction = policyPrediction(
+                frame, legalBall, objectiveBall, shotCount);
+        return prediction == null ? null : prediction.rankedPocketIndices;
     }
 
     private int pocketIndex(TableGeometry table, Pocket candidate) {
@@ -111,27 +121,77 @@ final class ShotPlanner {
      */
     private ShotPlan rankWithPhysics(FrameState frame, List<ShotPlan> candidates,
                                      int legalBall, int objectiveBall) {
+        return rankWithPhysics(frame, candidates, legalBall, objectiveBall, null);
+    }
+
+    private ShotPlan rankWithPhysics(
+            FrameState frame, List<ShotPlan> candidates, int legalBall, int objectiveBall,
+            NineBallImitationPolicy.Prediction neuralPrediction) {
         if (candidates == null || candidates.isEmpty()) return null;
         candidates.sort((a, b) -> Double.compare(a.score, b.score));
         ShotPlan best = null;
         double bestScore = Double.POSITIVE_INFINITY;
+
+        // Evaluate the learned continuous action as an additional candidate,
+        // but never let it bypass first-contact, scratch or off-table checks.
+        if (neuralPrediction != null) {
+            ShotPlan base = bestCandidateForPocket(
+                    frame.table, candidates, neuralPrediction.rankedPocketIndices);
+            if (base == null) base = candidates.get(0);
+            ShotPlan neural = withNeuralAction(
+                    base, frame.cueBall.center,
+                    neuralPrediction.angleOffset, neuralPrediction.power);
+            if (neural != null) {
+                double geometricAngle = Math.atan2(
+                        base.aimPoint.y - frame.cueBall.center.y,
+                        base.aimPoint.x - frame.cueBall.center.x);
+                double learnedAngle = Math.atan2(
+                        neural.aimPoint.y - frame.cueBall.center.y,
+                        neural.aimPoint.x - frame.cueBall.center.x);
+                double angleDeviation = Math.abs(wrapAngle(learnedAngle - geometricAngle));
+                double actionPenalty = angleDeviation * 0.5
+                        + Math.abs(neural.powerPercent - base.powerPercent) * 0.003;
+                neural = new ShotPlan(
+                        neural.target, neural.aimPoint, neural.pocket,
+                        neural.powerPercent, base.score + actionPenalty,
+                        neural.breakShot, neural.bankShot, neural.comboShot);
+                double[] neuralPowerOffsets = {-5.0, 0.0, 5.0};
+                for (double offset : neuralPowerOffsets) {
+                    double power = clamp(neural.powerPercent + offset,
+                            20.0, MAX_UI_POWER_PERCENT);
+                    ShotPlan trial = new ShotPlan(
+                            neural.target, neural.aimPoint, neural.pocket, power,
+                            neural.score, neural.breakShot, neural.bankShot, neural.comboShot);
+                    PhysicsShotEvaluator.Evaluation evaluation =
+                            physicsEvaluator.evaluate(frame, trial, legalBall, objectiveBall);
+                    if (!isSafeLegalEvaluation(evaluation)) continue;
+                    boolean objectiveMet = evaluation.targetPocketed
+                            && (objectiveBall != 9 || legalBall == 9 || evaluation.ninePocketed);
+                    double score = neural.score + Math.abs(offset) * 0.003
+                            - (objectiveMet ? 1.0 : 0.0)
+                            - evaluation.quality * 0.04;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        best = trial;
+                    }
+                }
+            }
+        }
+
         int limit = Math.min(4, candidates.size());
         double[] offsets = {-10.0, 0.0, 10.0};
-
         for (int i = 0; i < limit; i++) {
             ShotPlan geometric = candidates.get(i);
             for (double offset : offsets) {
-                double power = Math.max(20.0, Math.min(98.0,
-                        geometric.powerPercent + offset));
+                double power = clamp(geometric.powerPercent + offset,
+                        20.0, MAX_UI_POWER_PERCENT);
                 ShotPlan trial = new ShotPlan(
                         geometric.target, geometric.aimPoint, geometric.pocket,
                         power, geometric.score, geometric.breakShot,
                         geometric.bankShot, geometric.comboShot);
                 PhysicsShotEvaluator.Evaluation evaluation =
                         physicsEvaluator.evaluate(frame, trial, legalBall, objectiveBall);
-                if (evaluation == null || !evaluation.legalFirstContact
-                        || evaluation.simulation.cueScratch
-                        || evaluation.simulation.anyBallOffTable) continue;
+                if (!isSafeLegalEvaluation(evaluation)) continue;
 
                 boolean objectiveMet = evaluation.targetPocketed
                         && (objectiveBall != 9 || legalBall == 9 || evaluation.ninePocketed);
@@ -145,6 +205,61 @@ final class ShotPlanner {
             }
         }
         return best != null ? best : candidates.get(0);
+    }
+
+    private ShotPlan bestCandidateForPocket(
+            TableGeometry table, List<ShotPlan> candidates, int[] rankedPocketIndices) {
+        if (rankedPocketIndices == null || rankedPocketIndices.length == 0) return null;
+        for (int preferred : rankedPocketIndices) {
+            ShotPlan best = null;
+            for (ShotPlan candidate : candidates) {
+                if (pocketIndex(table, candidate.pocket) == preferred
+                        && (best == null || candidate.score < best.score)) {
+                    best = candidate;
+                }
+            }
+            if (best != null) return best;
+        }
+        return null;
+    }
+
+    static ShotPlan withNeuralAction(
+            ShotPlan base, Vec2 cueCenter, float angleOffset, float normalizedPower) {
+        if (base == null || base.target == null || base.target.center == null
+                || base.aimPoint == null || cueCenter == null
+                || !Float.isFinite(angleOffset) || !Float.isFinite(normalizedPower)) {
+            return null;
+        }
+        double offset = clamp(angleOffset, -1.0, 1.0);
+        double normalized = clamp(normalizedPower, -1.0, 1.0);
+        double directAngle = Math.atan2(
+                base.target.center.y - cueCenter.y,
+                base.target.center.x - cueCenter.x);
+        double learnedAngle = directAngle + offset * Math.PI;
+        double aimDistance = cueCenter.distance(base.aimPoint);
+        if (!Double.isFinite(aimDistance) || aimDistance < 1e-6) return null;
+
+        Vec2 learnedAimPoint = cueCenter.add(new Vec2(
+                Math.cos(learnedAngle), Math.sin(learnedAngle)).scale(aimDistance));
+        double powerPercent = ((normalized + 1.0) * 0.5) * MAX_UI_POWER_PERCENT;
+        powerPercent = clamp(powerPercent, 20.0, MAX_UI_POWER_PERCENT);
+        return new ShotPlan(
+                base.target, learnedAimPoint, base.pocket, powerPercent,
+                base.score, base.breakShot, base.bankShot, base.comboShot);
+    }
+
+    private boolean isSafeLegalEvaluation(PhysicsShotEvaluator.Evaluation evaluation) {
+        return evaluation != null && evaluation.legalFirstContact
+                && !evaluation.simulation.cueScratch
+                && !evaluation.simulation.anyBallOffTable;
+    }
+
+    private static double wrapAngle(double angle) {
+        return Math.atan2(Math.sin(angle), Math.cos(angle));
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private ShotPlan evaluateCombo(FrameState frame, Ball first, Ball nine) {
