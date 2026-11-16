@@ -1,8 +1,7 @@
 name: Chernika match-level PPO smoke test
 
 on:
-  push:
-    branches: [feature/nineball-match-ppo-v1]
+  pull_request:
     paths:
       - 'training/chernika_rl/match_env.py'
       - 'training/chernika_rl/train_match_ppo.py'
@@ -13,19 +12,10 @@ on:
       - 'training/NINE_BALL_MATCH_RL.md'
       - 'training/pyproject.toml'
       - '.github/workflows/rl-nineball-match-ppo.yml'
-  pull_request:
-    paths:
-      - 'training/chernika_rl/match_env.py'
-      - 'training/chernika_rl/train_match_ppo.py'
-      - 'training/chernika_rl/evaluate_match_ppo.py'
-      - 'training/tests/test_match_env.py'
-      - 'training/NINE_BALL_MATCH_RL.md'
-      - 'training/pyproject.toml'
-      - '.github/workflows/rl-nineball-match-ppo.yml'
   workflow_dispatch:
 
 concurrency:
-  group: chernika-match-ppo
+  group: chernika-match-ppo-pr
   cancel-in-progress: true
 
 jobs:
@@ -39,6 +29,8 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: training/pyproject.toml
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Install training package
         run: python -m pip install -e 'training[dev]'
       - name: Run match environment tests
