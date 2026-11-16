@@ -1,0 +1,127 @@
+{
+  "schema": "chernika.plato9ball.recordings.v1",
+  "generated_at": "2026-11-09",
+  "rulebook_version": "1.4",
+  "scope_note": "All game recordings are manual Plato self-play demonstrations, not autonomous Chernika gameplay.",
+  "media_policy": "Raw MP4s are not committed to this public repository; SHA-256 and derived annotations are stored instead.",
+  "split_policy": "Grouped by recording to prevent frame leakage.",
+  "recordings": [
+    {
+      "id": "plato_20261030_reference",
+      "file": "XRecorder_20261030_01.mp4",
+      "sha256": "2796588197bc75f3d998fc1c65ecd779165851222b4658a09dcb4bb87d1f826d",
+      "duration_s": 76.183,
+      "fps": 61.195,
+      "frames": 4662,
+      "resolution": "720x1216",
+      "size_bytes": 53105231,
+      "split": "training_calibration",
+      "quality": "silver",
+      "roles": [
+        "game_events",
+        "power_observations",
+        "motion_physics",
+        "route_markers"
+      ],
+      "notes": "7 ordinary shots reported; 8 slider measurements; 4 rolling trajectories; 5 collisions; 3 cushion impacts. Combo badge ~15.2s, bank badge ~22.9s, right-spin selector ~20.8s. Provisional physics estimates: friction .0079, ball restitution .946, cushion restitution .815, cue speed 1.010–2.667m/s. Target progression 1→2→3→6→8→Pocket 9; won."
+    },
+    {
+      "id": "plato_1000323251",
+      "file": "1000323251.mp4",
+      "sha256": "7957ecb43691f0cb8e1dcc535faca73942f74f59b361bb0e6c3665ef0a4a5e09",
+      "duration_s": 39.54,
+      "fps": 59.989,
+      "frames": 2372,
+      "resolution": "720x1216",
+      "size_bytes": 27262879,
+      "split": "validation_state_transitions",
+      "quality": "silver",
+      "roles": [
+        "target_hud",
+        "pocket_outcomes",
+        "partial_shot"
+      ],
+      "notes": "Target sequence 1→2→3. 1-ball pocketed ~16.5s; 2-ball ~25.5s; recording ends with target 3 active. Foul notices at 0s and ~9s. Three prior power readings .59/.97/.55 remain recording-level until frame-to-shot linkage is re-audited."
+    },
+    {
+      "id": "plato_1000323257",
+      "file": "1000323257.mp4",
+      "sha256": "fd043bacddfb15adda577f72e8da45c2c1aa19b8646722d17e634ab97c982077",
+      "duration_s": 75.943,
+      "fps": 55.463,
+      "frames": 4212,
+      "resolution": "720x1216",
+      "size_bytes": 51900138,
+      "split": "training_outcome_only",
+      "quality": "silver_draft",
+      "roles": [
+        "target_hud",
+        "pocket_outcomes",
+        "power_observations"
+      ],
+      "notes": "Four outcomes: 3→right-middle, 6→top-right, 8→bottom-right, 9→top-right. Power .3144/.4703/.6337/.9951; legacy valid interval .264851–.623762, so samples 3–4 are out of range. First-contact verification incomplete; use outcome/target labels only."
+    },
+    {
+      "id": "plato_1000323259",
+      "file": "1000323259.mp4",
+      "sha256": "58a62fd88a5cdc1219c43559d44f1bc4f4c8c82a52b461239e9a0bc141363853",
+      "duration_s": 130.609,
+      "fps": 58.916,
+      "frames": 7695,
+      "resolution": "720x1216",
+      "size_bytes": 97437492,
+      "split": "validation_long_match",
+      "quality": "silver",
+      "roles": [
+        "target_hud",
+        "scratch_recovery",
+        "turn_handoff",
+        "pocket_events"
+      ],
+      "notes": "Long-match target progression 1→2→3→8→Pocket 9. Break pocketed two; 6-ball pocketed ~53s while target 1; user scratch ~77s, opponent JW7 scratch ~81s; 2-ball ~94s, 7-ball ~104s while target 3, 3-ball ~112s, 8-ball ~120s; game won ~128s. Exact target-1 clear time and some first contacts remain uncertain."
+    },
+    {
+      "id": "plato_1000323339",
+      "file": "1000323339.mp4",
+      "sha256": "9ffaf1f529b220e5ed6789d06a91730d883ce3ef9afed598f1715c2bbb84da2a",
+      "duration_s": 40.662,
+      "fps": 60.671,
+      "frames": 2467,
+      "resolution": "720x1216",
+      "size_bytes": 30074653,
+      "split": "training_gold",
+      "quality": "gold_for_reviewed_shots",
+      "roles": [
+        "shot_demonstrations",
+        "route_types",
+        "power_spin",
+        "game_win"
+      ],
+      "notes": "Four reviewed shots: 1 bank→top-right, 2 direct→top-left, 3 direct→bottom-left with right spin, 5→9 combination→top-right. UI powers 97.8%, 29.5%, 97.8%, 73.8%; user confirmed 97.8% means maximum effective power (1.0) and shot 3 used right spin. Break pocketed two; game won."
+    },
+    {
+      "id": "plato_20261107_power_calibration",
+      "file": "XRecorder_20261107_02.mp4",
+      "sha256": "1932ee09941eedbebe39fc28a0a58c98d5f536a147f41ac90df94be50319a0d2",
+      "duration_s": 18.565,
+      "fps": 60.867,
+      "frames": 1130,
+      "resolution": "720x1216",
+      "size_bytes": 12495522,
+      "split": "calibration_only",
+      "quality": "calibration_reference",
+      "roles": [
+        "power_bar_geometry",
+        "power_mapping"
+      ],
+      "notes": "Power bar swept from maximum toward minimum; no completed shot. User-confirmed anchor: UI 97.8% = 100% effective power. Numeric handle-coordinate series still needs extraction."
+    }
+  ],
+  "excluded_duplicates": [
+    {
+      "file": "XRecorder_20261030_01(1).mp4",
+      "duplicate_of": "XRecorder_20261030_01.mp4",
+      "reason": "Previously verified byte-identical duplicate; not an independent recording."
+    }
+  ]
+}

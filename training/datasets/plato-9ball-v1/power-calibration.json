@@ -1,0 +1,55 @@
+{
+  "schema": "chernika.plato9ball.power-calibration.v1",
+  "user_confirmed_anchor": {
+    "ui_display_percent": 97.8,
+    "effective_power_fraction": 1,
+    "note": "97.8% in this Plato UI represents maximum power."
+  },
+  "legacy_valid_interval": {
+    "recording_id": "plato_1000323257",
+    "fraction": [
+      0.264851,
+      0.623762
+    ],
+    "status": "provisional; recheck against max-to-min sweep"
+  },
+  "calibration_recording": "XRecorder_20261107_02.mp4",
+  "observations": {
+    "plato_1000323339": [
+      {
+        "shot": 1,
+        "ui_percent": 97.8,
+        "effective": 1
+      },
+      {
+        "shot": 2,
+        "ui_percent": 29.5,
+        "effective": 0.295
+      },
+      {
+        "shot": 3,
+        "ui_percent": 97.8,
+        "effective": 1
+      },
+      {
+        "shot": 4,
+        "ui_percent": 73.8,
+        "effective": 0.738
+      }
+    ],
+    "plato_1000323257": [
+      0.3144,
+      0.4703,
+      0.6337,
+      0.9951
+    ],
+    "plato_1000323251": {
+      "values": [
+        0.59,
+        0.97,
+        0.55
+      ],
+      "association": "recording-level sequence; exact shot linkage pending re-audit"
+    }
+  }
+}
