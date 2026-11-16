@@ -173,3 +173,24 @@ identifies the recording collection, not the player who took each individual
 shot. Keep the raw video local and frame-review every proposed training label;
 OCR target announcements and win banners are weak labels only. See
 training/recordings/README.md for the annotation rules.
+
+
+## Real-game replay diagnostic
+
+The anonymized October 30 user recording is retained as one held-out rack
+review candidate under \`training/recordings/reviewed/\`. It shows a complete
+break-and-run: two balls on the break, then the 7, 1, 2, 3, 6, 8 and 9.
+
+Run the diagnostic from the training directory:
+
+~~~bash
+python -m chernika_rl.validate_recording_review \\
+  --manifest recordings/reviewed/20261030_break_and_run_candidate.json \\
+  --output artifacts/recording_replay_diagnostic.json
+~~~
+
+The report compares the reviewed angle/power estimates with the current
+physics mirror and searches nearby power values for the observed pocket set.
+It is a calibration diagnostic only. The single rack is not included in
+behavior-cloning or PPO training, and no simulator mismatch is hidden or
+automatically relabeled.
