@@ -45,8 +45,8 @@ class ChernikaMatchEnv(gym.Env):
         opponent_policy: Any | None = None,
     ) -> None:
         super().__init__()
-        if max_shots < 2:
-            raise ValueError("max_shots must be at least 2")
+        if max_shots < 1:
+            raise ValueError("max_shots must be positive")
         if opponent_strategy not in ("teacher_greedy", "teacher_lookahead"):
             raise ValueError("opponent_strategy must be teacher_greedy or teacher_lookahead")
         if opponent_depth not in (1, 2):
