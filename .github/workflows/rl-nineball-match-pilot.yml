@@ -1,16 +1,6 @@
 name: Chernika match-level PPO training pilot
 
 on:
-  pull_request:
-    paths:
-      - 'training/chernika_rl/match_env.py'
-      - 'training/chernika_rl/nine_ball_rollout.py'
-      - 'training/chernika_rl/generate_match_demonstrations.py'
-      - 'training/chernika_rl/train_match_behavior_cloning.py'
-      - 'training/chernika_rl/train_match_ppo.py'
-      - 'training/chernika_rl/evaluate_match_ppo.py'
-      - 'training/NINE_BALL_MATCH_RL.md'
-      - '.github/workflows/rl-nineball-match-pilot.yml'
   workflow_dispatch:
 
 concurrency:
