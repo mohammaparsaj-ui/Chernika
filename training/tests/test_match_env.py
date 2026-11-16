@@ -163,3 +163,49 @@ def test_fouled_nine_is_respotted_before_ball_in_hand(monkeypatch):
     assert recovery["nine_respot_position"] == (306.5, 354.5)
     assert 9 in env.game.object_balls
     assert env.game.cue is not None
+
+
+def test_legal_miss_runs_opponent_until_agent_turn_returns(monkeypatch):
+    env = ChernikaMatchEnv(max_shots=6)
+    env.reset(seed=20261122)
+    calls = []
+
+    def fake_step(action):
+        calls.append(np.asarray(action, dtype=np.float32).copy())
+        env.game.shot_count += 1
+        info = {
+            "win": False,
+            "foul": False,
+            "legal_shot": True,
+            "pocketed_numbers": [],
+            "break_shot": False,
+            "legal_ball": 1,
+            "first_contact": 1,
+            "foul_reason": None,
+            "remaining_balls": sorted(env.game.object_balls),
+            "power_percent": 50.0,
+            "angle_radians": 0.0,
+            "cue_scratch": False,
+            "off_table": False,
+        }
+        return env._observation.copy(), 0.0, False, False, info
+
+    monkeypatch.setattr(env.game, "step", fake_step)
+    monkeypatch.setattr(
+        env,
+        "_opponent_action",
+        lambda: (np.zeros(2, dtype=np.float32), None),
+    )
+
+    observation, reward, terminated, truncated, info = env.step(
+        np.zeros(2, dtype=np.float32)
+    )
+
+    assert len(calls) == 2
+    assert observation.shape == (52,)
+    assert reward > 0.0
+    assert terminated is False
+    assert truncated is False
+    assert env._opponent_shots == 1
+    assert info["current_player"] == 0
+    assert info["trajectory"][1]["player"] == "opponent"
