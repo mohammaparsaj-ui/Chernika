@@ -5,6 +5,7 @@ on:
     branches:
       - feature/rl-aim-training-v1
       - rebuild/table-simulator-gameplay
+      - feature/nineball-match-bc-v1
     paths:
       - 'app/src/main/java/com/cherunika/chernika/PoolPhysics.java'
       - 'app/src/main/java/com/cherunika/chernika/NineBallRules.java'
@@ -13,6 +14,7 @@ on:
       - 'app/src/main/java/com/cherunika/chernika/ChernikaAccessibilityService.java'
       - 'app/src/main/java/com/cherunika/chernika/NineBallObservationEncoder.java'
       - 'app/src/main/java/com/cherunika/chernika/NineBallImitationPolicy.java'
+      - 'app/src/main/java/com/cherunika/chernika/MatchPpoPolicy.java'
       - 'app/src/test/**'
       - 'app/build.gradle'
       - 'build.gradle'

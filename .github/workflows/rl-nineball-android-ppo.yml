@@ -1,0 +1,61 @@
+name: Chernika Android match PPO export and inference checks
+
+on:
+  pull_request:
+    paths:
+      - 'training/chernika_rl/export_match_ppo_policy.py'
+      - 'training/tests/test_match_ppo_export.py'
+      - 'app/src/main/java/com/cherunika/chernika/MatchPpoPolicy.java'
+      - 'app/src/test/java/com/cherunika/chernika/MatchPpoPolicyTest.java'
+      - 'app/build.gradle'
+      - '.github/workflows/rl-nineball-android-ppo.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: chernika-android-match-ppo
+  cancel-in-progress: true
+
+jobs:
+  python-export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: training/pyproject.toml
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install training package
+        run: python -m pip install -e 'training[dev]'
+      - name: Test PPO actor export parity
+        run: pytest -q training/tests/test_match_ppo_export.py
+
+  android-inference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 9.8.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
+      - name: Configure Android SDK
+        run: |
+          set -euo pipefail
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;36.0.0" "platform-tools"
+      - name: Compile Android and run Java inference tests
+        run: gradle :app:testDebugUnitTest :app:compileDebugJavaWithJavac --no-daemon --stacktrace
