@@ -1,6 +1,16 @@
 name: Chernika match-level PPO smoke test
 
 on:
+  push:
+    branches: [feature/nineball-match-ppo-v1]
+    paths:
+      - 'training/chernika_rl/match_env.py'
+      - 'training/chernika_rl/train_match_ppo.py'
+      - 'training/chernika_rl/evaluate_match_ppo.py'
+      - 'training/tests/test_match_env.py'
+      - 'training/NINE_BALL_MATCH_RL.md'
+      - 'training/pyproject.toml'
+      - '.github/workflows/rl-nineball-match-ppo.yml'
   pull_request:
     paths:
       - 'training/chernika_rl/match_env.py'
