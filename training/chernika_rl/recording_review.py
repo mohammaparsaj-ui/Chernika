@@ -175,12 +175,13 @@ def parse_target_announcement(text: str) -> int | None:
 
 
 def parse_pocket_announcement(text: str) -> list[int] | None:
-    """Read a weak pocket OCR label; break counts remain number-unknown."""
+    """Read a numbered pocket OCR label; a count-only banner stays unknown."""
     value = (text or "").strip()
     match = re.search(r"you\s+pocketed\s+the\s*([1-9])\s*[- ]?ball", value, re.I)
-    if match:
-        return [int(match.group(1))]
-    count = re.search(r"you\s+pocketed\s+([1-9])\s+balls?", value, re.I)
-    if count:
-        return []
-    return None
+    return [int(match.group(1))] if match else None
+
+
+def parse_pocket_count_announcement(text: str) -> int | None:
+    """Read a count-only pocket banner without inventing ball identities."""
+    match = re.search(r"you\s+pocketed\s+([1-9])\s+balls?", text or "", re.I)
+    return int(match.group(1)) if match else None
