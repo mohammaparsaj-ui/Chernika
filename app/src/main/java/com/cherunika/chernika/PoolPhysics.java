@@ -16,12 +16,13 @@ final class PoolPhysics {
     private static final double TIME_STEP_SECONDS = 1.0 / 240.0;
     private static final double MAX_SIMULATION_SECONDS = 40.0;
 
-    // Candidate measurements from the existing 2026-10-30 Plato recording.
-    // Keep these provisional until replayed against more shots.
+    // Recalibrated from the supplied 720x1216 Plato replay (2026-11-06):
+    // a ~65% shot moved the cue ball about 70x27 px in its first 0.4 s,
+    // before object-ball contact. These remain provisional single-replay values.
     private static final double BALL_RESTITUTION = 0.946;
     private static final double RAIL_RESTITUTION = 0.815;
-    private static final double ROLLING_RESISTANCE_COEFFICIENT = 0.0079;
-    private static final double MAX_CUE_SPEED_METERS_PER_SECOND = 2.667;
+    private static final double ROLLING_RESISTANCE_COEFFICIENT = 0.0095;
+    private static final double MAX_CUE_SPEED_METERS_PER_SECOND = 0.66;
     private static final double MAX_UI_POWER_PERCENT = 97.8;
 
     // The calibrated portrait table is consistent with an approximately

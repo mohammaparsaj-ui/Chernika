@@ -7,7 +7,6 @@ import android.content.SharedPreferences;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -64,17 +63,20 @@ public class MainActivity extends Activity {
         root.addView(serviceState, new LinearLayout.LayoutParams(-1, -2));
 
         Button accessibility = button("Enable game-control accessibility");
-        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        accessibility.setOnClickListener(v ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         addButton(root, accessibility);
 
         Button start = button("START ENGINE");
         start.setOnClickListener(v -> {
             prefs.edit().putBoolean("engine_enabled", true).apply();
             if (!isAccessibilityEnabled()) {
-                prefs.edit().putString("last_status", "Enable Chernika Game Control in Accessibility settings, then return here.").apply();
+                prefs.edit().putString("last_status",
+                        "Enable Chernika Game Control in Accessibility settings, then return here.").apply();
                 startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             } else {
-                prefs.edit().putString("last_status", "Engine armed. Open Plato 9-ball in landscape.").apply();
+                prefs.edit().putString("last_status",
+                        "Engine armed. Open Plato 9-ball in portrait orientation.").apply();
             }
         });
         addButton(root, start);
@@ -87,7 +89,7 @@ public class MainActivity extends Activity {
         addButton(root, stop);
 
         TextView permissions = new TextView(this);
-        permissions.setText("The accessibility service reads the visible game screen and performs touch gestures only while the engine is enabled. It waits rather than shooting when the table, target, cue ball, or power bar is uncertain.");
+        permissions.setText("The accessibility service reads the visible game screen and performs touch gestures only while the engine is enabled. It waits rather than shooting when the table, target, cue ball, or power control is uncertain.");
         permissions.setTextColor(0xFFB9B2C7);
         permissions.setTextSize(13);
         permissions.setLineSpacing(5, 1.0f);
@@ -132,12 +134,16 @@ public class MainActivity extends Activity {
     }
 
     private boolean isAccessibilityEnabled() {
-        String enabled = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        String enabled = Settings.Secure.getString(getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (TextUtils.isEmpty(enabled)) return false;
-        String expected = new ComponentName(this, ChernikaAccessibilityService.class).flattenToString();
+        String expected = new ComponentName(this,
+                ChernikaAccessibilityService.class).flattenToString();
         TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
         splitter.setString(enabled);
-        for (String item : splitter) if (expected.equalsIgnoreCase(item)) return true;
+        for (String item : splitter) {
+            if (expected.equalsIgnoreCase(item)) return true;
+        }
         return false;
     }
 

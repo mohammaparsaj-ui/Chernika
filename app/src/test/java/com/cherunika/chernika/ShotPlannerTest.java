@@ -64,6 +64,38 @@ public class ShotPlannerTest {
         assertEquals(reference.powerPercent, doubled.powerPercent, 1e-9);
     }
 
+    @Test public void breakAlwaysTargetsTheOneBallNotTheBallNearestToCue() {
+        FrameState frame = new FrameState(611, 1024);
+        frame.table = PlatoTableCalibration.fromDetectedFeltBounds(
+                112, 159, 495, 904, 611, 1024);
+        // This deliberately makes the purple 4-ball closer to the cue than #1.
+        frame.cueBall = new Ball(new Vec2(140, 420), 11.5, 0, true);
+        frame.balls.add(frame.cueBall);
+        int[] numbers = {8, 6, 7, 4, 9, 5, 2, 3, 1};
+        double[][] centers = {
+                {306.5, 274.5}, {294.5, 294.5}, {318.5, 294.5},
+                {283.5, 314.5}, {306.5, 314.5}, {329.5, 314.5},
+                {294.5, 334.5}, {318.5, 334.5}, {306.5, 354.5}
+        };
+        for (int i = 0; i < numbers.length; i++) {
+            frame.balls.add(new Ball(new Vec2(centers[i][0], centers[i][1]),
+                    11.5, numbers[i], false, numbers[i], 0.80));
+        }
+
+        ShotPlan plan = new ShotPlanner().planBreak(frame);
+        assertNotNull(plan);
+        assertTrue(plan.breakShot);
+        assertEquals(1, plan.target.number);
+        assertEquals(306.5, plan.target.center.x, 1e-6);
+        assertEquals(354.5, plan.target.center.y, 1e-6);
+    }
+
+    @Test public void highConfidenceRackTemplateIdentityIsNotOverwrittenByTinyBallOcr() {
+        Ball one = new Ball(new Vec2(306.5, 354.5), 11.5, 1, false, 1, 0.55);
+        one.applyOcrNumber(9);
+        assertEquals(1, one.number);
+    }
+
     @Test public void returnsNoShotWhenTargetNumberIsUnknown() {
         FrameState frame = new FrameState(1200, 1600);
         frame.table = table();
