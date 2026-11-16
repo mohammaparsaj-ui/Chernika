@@ -10,10 +10,12 @@ on:
       - 'training/chernika_rl/train_match_behavior_cloning.py'
       - 'training/chernika_rl/recording_identity.py'
       - 'training/chernika_rl/recording_review.py'
+      - 'training/chernika_rl/validate_recording_review.py'
       - 'training/tests/test_match_env.py'
       - 'training/tests/test_match_bc.py'
       - 'training/tests/test_recording_identity.py'
       - 'training/tests/test_recording_review.py'
+      - 'training/tests/test_validate_recording_review.py'
       - 'training/NINE_BALL_MATCH_RL.md'
       - 'training/pyproject.toml'
       - '.github/workflows/rl-nineball-match-ppo.yml'
@@ -40,6 +42,12 @@ jobs:
         run: python -m pip install -e 'training[dev]'
       - name: Run match and behavior-cloning tests
         run: pytest -q training/tests/test_match_env.py training/tests/test_match_bc.py training/tests/test_recording_identity.py training/tests/test_recording_review.py
+      - name: Replay reviewed October 30 rack against physics mirror
+        working-directory: training
+        run: |
+          python -m chernika_rl.validate_recording_review \\
+            --manifest recordings/reviewed/20261030_break_and_run_candidate.json \\
+            --output artifacts/recording_replay_diagnostic.json
       - name: Generate small complete-rack teacher dataset
         working-directory: training
         run: |
@@ -83,6 +91,7 @@ jobs:
         with:
           name: chernika-match-ppo-smoke
           path: |
+            training/artifacts/recording_replay_diagnostic.json
             training/artifacts/match_bc_smoke_dataset.npz
             training/artifacts/match_bc_smoke_dataset.json
             training/artifacts/match_bc_smoke.pt
