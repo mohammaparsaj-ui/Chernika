@@ -1,0 +1,96 @@
+name: Chernika match-level PPO training pilot
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: chernika-match-ppo-pilot
+  cancel-in-progress: true
+
+jobs:
+  train-and-evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: training/pyproject.toml
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install training package
+        run: python -m pip install -e 'training[dev]'
+      - name: Generate complete-rack teacher demonstrations
+        working-directory: training
+        run: |
+          python -m chernika_rl.generate_match_demonstrations \
+            --racks 30 \
+            --seed 98000 \
+            --max-shots 24 \
+            --depth 1 \
+            --output artifacts/match_pilot_demonstrations.npz
+      - name: Validate demonstration coverage
+        working-directory: training
+        run: |
+          python - <<'PY'
+          import json
+          import numpy as np
+          from pathlib import Path
+          meta = json.loads(Path("artifacts/match_pilot_demonstrations.json").read_text())
+          data = np.load("artifacts/match_pilot_demonstrations.npz", allow_pickle=False)
+          assert meta["unique_racks_with_samples"] >= 10, meta
+          assert set(data["players"].tolist()) == {0, 1}, meta
+          assert len(data["observations"]) >= 100, meta
+          assert len(np.unique(data["groups"])) >= 10, meta
+          print(json.dumps(meta, indent=2))
+          PY
+      - name: Train behavior-cloning actor
+        working-directory: training
+        run: |
+          python -m chernika_rl.train_match_behavior_cloning \
+            --data artifacts/match_pilot_demonstrations.npz \
+            --epochs 50 \
+            --batch-size 128 \
+            --min-demonstrations 100 \
+            --output artifacts/match_pilot_bc.pt
+      - name: Train PPO from the pretrained actor
+        working-directory: training
+        run: |
+          python -m chernika_rl.train_match_ppo \
+            --bc-checkpoint artifacts/match_pilot_bc.pt \
+            --total-timesteps 2048 \
+            --n-envs 1 \
+            --n-steps 128 \
+            --batch-size 32 \
+            --max-shots 24 \
+            --opponent-strategy teacher_greedy \
+            --opponent-depth 1 \
+            --seed 20261116 \
+            --output artifacts/match_pilot_ppo
+      - name: Evaluate full racks against the physics teacher
+        working-directory: training
+        run: |
+          python -m chernika_rl.evaluate_match_ppo \
+            --model artifacts/match_pilot_ppo.zip \
+            --episodes 10 \
+            --seed 99000 \
+            --max-shots 48 \
+            --opponent-strategy teacher_greedy \
+            --opponent-depth 1 \
+            --output artifacts/match_pilot_evaluation.json
+      - name: Upload pilot dataset, checkpoints and evaluation
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernika-match-ppo-pilot
+          path: |
+            training/artifacts/match_pilot_demonstrations.npz
+            training/artifacts/match_pilot_demonstrations.json
+            training/artifacts/match_pilot_bc.pt
+            training/artifacts/match_pilot_bc.metrics.json
+            training/artifacts/match_pilot_ppo.zip
+            training/artifacts/match_pilot_ppo.metadata.json
+            training/artifacts/match_pilot_evaluation.json
+          if-no-files-found: error
+          retention-days: 14
