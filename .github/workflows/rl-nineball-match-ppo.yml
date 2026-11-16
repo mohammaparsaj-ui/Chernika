@@ -9,9 +9,11 @@ on:
       - 'training/chernika_rl/generate_match_demonstrations.py'
       - 'training/chernika_rl/train_match_behavior_cloning.py'
       - 'training/chernika_rl/recording_identity.py'
+      - 'training/chernika_rl/recording_review.py'
       - 'training/tests/test_match_env.py'
       - 'training/tests/test_match_bc.py'
       - 'training/tests/test_recording_identity.py'
+      - 'training/tests/test_recording_review.py'
       - 'training/NINE_BALL_MATCH_RL.md'
       - 'training/pyproject.toml'
       - '.github/workflows/rl-nineball-match-ppo.yml'
@@ -37,7 +39,7 @@ jobs:
       - name: Install training package
         run: python -m pip install -e 'training[dev]'
       - name: Run match and behavior-cloning tests
-        run: pytest -q training/tests/test_match_env.py training/tests/test_match_bc.py training/tests/test_recording_identity.py
+        run: pytest -q training/tests/test_match_env.py training/tests/test_match_bc.py training/tests/test_recording_identity.py training/tests/test_recording_review.py
       - name: Generate small complete-rack teacher dataset
         working-directory: training
         run: |
