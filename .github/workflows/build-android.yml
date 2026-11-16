@@ -2,7 +2,7 @@ name: Build Chernika raw Android APK
 
 on:
   pull_request:
-    branches: [main, 'feature/chernika-home-dashboard-v1']
+    branches: [main]
     paths:
       - 'app/**'
       - '.github/workflows/build-android.yml'
@@ -10,7 +10,7 @@ on:
       - 'settings.gradle'
       - 'gradle.properties'
   push:
-    branches: [main]
+    branches: [main, 'feature/chernika-home-dashboard-v1']
     paths:
       - 'Chernika_Raw_Source.zip'
       - 'chernika-raw-source.zip'
