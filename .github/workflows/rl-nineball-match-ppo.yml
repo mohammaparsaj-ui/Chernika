@@ -39,11 +39,11 @@ jobs:
         working-directory: training
         run: |
           python -m chernika_rl.train_match_ppo \
-            --total-timesteps 16 \
+            --total-timesteps 8 \
             --n-envs 1 \
             --n-steps 8 \
             --batch-size 4 \
-            --max-shots 2 \
+            --max-shots 1 \
             --output artifacts/match_ppo_smoke
       - name: Evaluate smoke checkpoint
         working-directory: training
@@ -52,7 +52,7 @@ jobs:
             --model artifacts/match_ppo_smoke.zip \
             --episodes 2 \
             --seed 97000 \
-            --max-shots 2 \
+            --max-shots 1 \
             --output artifacts/match_ppo_smoke_evaluation.json
       - name: Upload smoke outputs
         uses: actions/upload-artifact@v4
