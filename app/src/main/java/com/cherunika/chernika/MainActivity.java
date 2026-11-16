@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.chernika_icon);
+        logo.setImageResource(R.drawable.chernika_character_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
         logo.setBackground(round(PANEL_LIGHT, 0xFF7250A7, 24));
         logo.setClipToOutline(true);
@@ -112,7 +112,7 @@ public class MainActivity extends Activity {
         hero.addView(heroCopy, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView character = new ImageView(this);
-        character.setImageResource(R.drawable.chernika_icon);
+        character.setImageResource(R.drawable.chernika_character_icon);
         character.setScaleType(ImageView.ScaleType.CENTER_CROP);
         character.setBackground(round(0xFF211535, 0xFF8C62CB, 20));
         character.setClipToOutline(true);
