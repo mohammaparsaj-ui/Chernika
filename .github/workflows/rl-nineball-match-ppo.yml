@@ -42,9 +42,9 @@ jobs:
         working-directory: training
         run: |
           python -m chernika_rl.generate_match_demonstrations \
-            --racks 8 \
+            --racks 4 \
             --seed 97000 \
-            --max-shots 8 \
+            --max-shots 2 \
             --depth 1 \
             --output artifacts/match_bc_smoke_dataset.npz
       - name: Pretrain PPO actor from grouped demonstrations
