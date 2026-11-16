@@ -1,0 +1,233 @@
+{
+  "schema": "chernika.recording_review.v1",
+  "recording_id": "plato_9ball_20261030_win_01",
+  "source": {
+    "kind": "user-provided-screen-recording",
+    "filename": "XRecorder_20261030_01.mp4",
+    "duration_seconds": 76.18,
+    "resolution": [720, 1216],
+    "raw_video_committed": false
+  },
+  "review": {
+    "status": "manual_visual_candidate",
+    "reviewed_at": "2026-11-16",
+    "reviewer_method": "frame-by-frame visual review plus OCR and circle-detection cross-check",
+    "training_eligible": false,
+    "not_training_eligible_reasons": [
+      "This is one rack only and cannot form a leakage-safe rack-grouped train/validation split.",
+      "Screen-to-physics calibration and power-slider transfer still require replay parity checks.",
+      "The break rack is visually occluded, so its full pre-shot state is not reconstructed.",
+      "First-contact identity is inferred from the aim guide and target announcement, not independently confirmed by a collision trace."
+    ],
+    "privacy": {
+      "player_names": "redacted",
+      "opponent_identity": "not retained"
+    }
+  },
+  "table_calibration": {
+    "screen_playable_bounds_px": {
+      "left": 143.0,
+      "top": 195.0,
+      "right": 580.0,
+      "bottom": 1075.0
+    },
+    "physics_bounds": {
+      "left": 120.0,
+      "top": 169.0,
+      "right": 490.0,
+      "bottom": 895.0
+    },
+    "power_slider_marker_y": {
+      "maximum_power": 603.0,
+      "minimum_power": 1010.0,
+      "maximum_power_percent": 97.8
+    }
+  },
+  "rack_result": {
+    "game_type": "Plato 9-ball",
+    "winner": "user",
+    "result_evidence": "You won",
+    "result_timestamp_seconds": 74.0,
+    "your_turn_label_observed": true,
+    "your_turn_sampled_throughout_active_rack": true,
+    "total_shots_including_break": 8,
+    "post_break_shots": 7,
+    "fouls_observed": 0,
+    "pocketed_numbers_by_shot": [
+      [4, 5],
+      [7],
+      [1],
+      [2],
+      [3],
+      [6],
+      [8],
+      [9]
+    ],
+    "break_pocketed_numbers_evidence": "The UI reports two balls pocketed; the post-break table visibly contains balls 1, 2, 3, 6, 7, 8 and 9, so 4 and 5 are inferred absent."
+  },
+  "shots": [
+    {
+      "shot_index": 1,
+      "kind": "break",
+      "time_window_seconds": [0.0, 4.0],
+      "target_announcement": 1,
+      "pocketed_numbers": [4, 5],
+      "pocketed_numbers_confidence": "inferred_from_remaining_inventory",
+      "player_turn_label": "Your Turn",
+      "pre_shot_state": null,
+      "training_eligible": false
+    },
+    {
+      "shot_index": 2,
+      "kind": "post_break",
+      "time_window_seconds": [7.0, 11.0],
+      "pre_shot_frame_seconds": 10.0,
+      "target_announcement": 1,
+      "pocketed_numbers": [7],
+      "cue_screen_px": [326.5, 447.5],
+      "object_balls_screen_px": {
+        "1": [363.5, 420.5],
+        "2": [170.5, 468.5],
+        "3": [547.5, 469.5],
+        "6": [188.5, 284.5],
+        "7": [522.5, 288.5],
+        "8": [354.5, 335.5],
+        "9": [358.5, 370.5]
+      },
+      "aim_marker_screen_px": [343.5, 436.5],
+      "power_marker_y_px": 603.0,
+      "power_percent_estimate": 97.8,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    },
+    {
+      "shot_index": 3,
+      "kind": "post_break",
+      "time_window_seconds": [17.0, 24.6],
+      "pre_shot_frame_seconds": 24.3,
+      "target_announcement": 1,
+      "pocketed_numbers": [1],
+      "cue_screen_px": [352.5, 446.5],
+      "object_balls_screen_px": {
+        "1": [554.5, 343.5],
+        "2": [170.5, 468.5],
+        "3": [547.5, 469.5],
+        "6": [188.5, 284.5],
+        "8": [354.5, 335.5],
+        "9": [358.5, 370.5]
+      },
+      "aim_marker_screen_px": [553.5, 369.5],
+      "power_marker_y_px": 803.0,
+      "power_percent_estimate": 49.7,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    },
+    {
+      "shot_index": 4,
+      "kind": "post_break",
+      "time_window_seconds": [30.0, 34.2],
+      "pre_shot_frame_seconds": 34.0,
+      "target_announcement": 2,
+      "pocketed_numbers": [2],
+      "cue_screen_px": [231.5, 356.5],
+      "object_balls_screen_px": {
+        "2": [240.5, 582.5],
+        "3": [547.5, 469.5],
+        "6": [188.5, 284.5],
+        "8": [354.5, 335.5],
+        "9": [358.5, 370.5]
+      },
+      "aim_marker_screen_px": [262.5, 569.5],
+      "power_marker_y_px": 814.0,
+      "power_percent_estimate": 47.1,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    },
+    {
+      "shot_index": 5,
+      "kind": "post_break",
+      "time_window_seconds": [40.0, 44.6],
+      "pre_shot_frame_seconds": 44.0,
+      "target_announcement": 3,
+      "pocketed_numbers": [3],
+      "cue_screen_px": [557.5, 894.5],
+      "object_balls_screen_px": {
+        "3": [548.5, 469.5],
+        "6": [188.5, 283.5],
+        "8": [356.5, 333.5],
+        "9": [358.5, 370.5]
+      },
+      "aim_marker_screen_px": [545.5, 495.5],
+      "power_marker_y_px": 603.0,
+      "power_percent_estimate": 97.8,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    },
+    {
+      "shot_index": 6,
+      "kind": "post_break",
+      "time_window_seconds": [49.0, 52.0],
+      "pre_shot_frame_seconds": 51.5,
+      "target_announcement": 6,
+      "pocketed_numbers": [6],
+      "cue_screen_px": [483.5, 605.5],
+      "object_balls_screen_px": {
+        "6": [191.5, 284.5],
+        "8": [354.5, 335.5],
+        "9": [358.5, 370.5]
+      },
+      "aim_marker_screen_px": [200.5, 307.5],
+      "power_marker_y_px": 603.0,
+      "power_percent_estimate": 97.8,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    },
+    {
+      "shot_index": 7,
+      "kind": "post_break",
+      "time_window_seconds": [56.0, 58.6],
+      "pre_shot_frame_seconds": 57.0,
+      "target_announcement": 8,
+      "pocketed_numbers": [8],
+      "cue_screen_px": [218.5, 344.5],
+      "object_balls_screen_px": {
+        "8": [356.5, 333.5],
+        "9": [358.5, 370.5]
+      },
+      "aim_marker_screen_px": [334.5, 347.5],
+      "power_marker_y_px": 603.0,
+      "power_percent_estimate": 97.8,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    },
+    {
+      "shot_index": 8,
+      "kind": "post_break",
+      "time_window_seconds": [63.0, 68.2],
+      "pre_shot_frame_seconds": 67.0,
+      "target_announcement": 9,
+      "pocketed_numbers": [9],
+      "cue_screen_px": [294.5, 416.5],
+      "object_balls_screen_px": {
+        "9": [511.5, 487.5]
+      },
+      "aim_marker_screen_px": [503.5, 464.5],
+      "power_marker_y_px": 757.0,
+      "power_percent_estimate": 60.8,
+      "action_confidence": "medium",
+      "player_turn_label": "Your Turn",
+      "training_eligible": false
+    }
+  ],
+  "notes": [
+    "The event sequence is consistent with a clean break-and-run: 4/5 on the break, then 7, 1, 2, 3, 6, 8 and 9.",
+    "The video is useful as a held-out replay reference, not as proof that the current simulator or PPO policy can reproduce the rack.",
+    "All screen coordinates and slider-derived powers remain review candidates until the replay calibration gate passes."
+  ]
+}
