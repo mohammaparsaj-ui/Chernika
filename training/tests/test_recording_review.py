@@ -7,6 +7,7 @@ from chernika_rl.recording_review import (
     derive_reviewed_action,
     encode_reviewed_observation,
     parse_pocket_announcement,
+    parse_pocket_count_announcement,
     parse_target_announcement,
     power_marker_to_percent,
     screen_to_physics,
@@ -67,7 +68,9 @@ def test_ocr_parsers_leave_uncertain_labels_null():
     assert parse_target_announcement("Pocket the 9-ball!") == 9
     assert parse_target_announcement("Hit the O-ball") is None
     assert parse_pocket_announcement("You pocketed the 7-ball") == [7]
-    assert parse_pocket_announcement("You pocketed 2 balls") == []
+    assert parse_pocket_announcement("You pocketed 2 balls") is None
+    assert parse_pocket_count_announcement("You pocketed 2 balls") == 2
+    assert parse_pocket_count_announcement("You pocketed the 7-ball") is None
     assert parse_pocket_announcement("some unrelated text") is None
 
 
