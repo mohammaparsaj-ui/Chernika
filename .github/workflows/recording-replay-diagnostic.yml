@@ -1,0 +1,42 @@
+name: Chernika reviewed real-game replay diagnostic
+
+on:
+  push:
+    branches:
+      - feature/nineball-match-bc-v1
+    paths:
+      - 'training/chernika_rl/recording_review.py'
+      - 'training/chernika_rl/validate_recording_review.py'
+      - 'training/recordings/reviewed/**'
+      - 'training/tests/test_recording_review.py'
+      - 'training/tests/test_validate_recording_review.py'
+      - '.github/workflows/recording-replay-diagnostic.yml'
+
+concurrency:
+  group: chernika-recording-replay-diagnostic
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lightweight diagnostic dependencies
+        run: python -m pip install numpy pytest
+      - name: Test reviewed recording conversion
+        working-directory: training
+        run: pytest -q tests/test_recording_review.py tests/test_validate_recording_review.py
+      - name: Replay the October 30 rack against the physics mirror
+        working-directory: training
+        run: python -m chernika_rl.validate_recording_review --manifest recordings/reviewed/20261030_break_and_run_candidate.json --output artifacts/recording_replay_diagnostic.json
+      - name: Upload replay diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernika-october-30-replay-diagnostic
+          path: training/artifacts/recording_replay_diagnostic.json
+          if-no-files-found: error
+          retention-days: 30
