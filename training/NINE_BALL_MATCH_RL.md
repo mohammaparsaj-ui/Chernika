@@ -173,3 +173,33 @@ identifies the recording collection, not the player who took each individual
 shot. Keep the raw video local and frame-review every proposed training label;
 OCR target announcements and win banners are weak labels only. See
 training/recordings/README.md for the annotation rules.
+
+
+## Android PPO actor export (runtime groundwork)
+
+The match PPO actor is not the same model as the earlier pocket-ranking
+imitation network. Its output is two continuous controls: normalized angle
+offset and normalized power. Do not place the PPO checkpoint in the older
+nine_ball_policy.bin asset; that file has a different binary layout and
+different output semantics.
+
+After a match PPO checkpoint has passed held-out evaluation, export it:
+
+~~~bash
+python -m chernika_rl.export_match_ppo_policy \
+  --model artifacts/nine_ball_match_ppo.zip \
+  --output artifacts/nine_ball_match_ppo.bin
+~~~
+
+The exporter checks the 52-input/two-output actor architecture, writes a
+versioned big-endian CHM1 binary, and compares its output against
+Stable-Baselines3 deterministic prediction. Android's pure-Java
+MatchPpoPolicy implements the same two Tanh hidden layers and clipped
+deterministic action mean. Its unit tests verify the binary contract,
+activation, output clipping and malformed-file rejection.
+
+This is inference groundwork only. The class is not yet connected to live
+shot dispatch, and no PPO action is authorized to fire in Plato. Before
+integration, require a real trained checkpoint, Python/Java golden-state
+parity, shot replay parity against the current physics guard, and an explicit
+shadow-mode evaluation on recorded frames.
