@@ -44,10 +44,7 @@ jobs:
         run: pytest -q training/tests/test_match_env.py training/tests/test_match_bc.py training/tests/test_recording_identity.py training/tests/test_recording_review.py
       - name: Replay reviewed October 30 rack against physics mirror
         working-directory: training
-        run: |
-          python -m chernika_rl.validate_recording_review \\
-            --manifest recordings/reviewed/20261030_break_and_run_candidate.json \\
-            --output artifacts/recording_replay_diagnostic.json
+        run: python -m chernika_rl.validate_recording_review --manifest recordings/reviewed/20261030_break_and_run_candidate.json --output artifacts/recording_replay_diagnostic.json
       - name: Generate small complete-rack teacher dataset
         working-directory: training
         run: |
