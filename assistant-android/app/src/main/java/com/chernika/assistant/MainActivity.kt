@@ -2,6 +2,11 @@ package com.chernika.assistant
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
+import android.net.Uri
+import android.os.StatFs
+import java.io.File
+import java.io.FileOutputStream
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -39,6 +44,10 @@ class MainActivity : Activity() {
     private lateinit var send: Button
     private var mode = "AUTO"
     private var busy = false
+    private val modelFile by lazy { File(filesDir, "Qwen3-0.6B.litertlm") }
+    private val offlineBrain by lazy { OfflineBrain(applicationContext, modelFile) }
+    private val modelRequestCode = 1451
+    private val modelSource = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm"
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density + 0.5f).toInt()
     private fun shape(color: Int): GradientDrawable = GradientDrawable().apply {
@@ -68,6 +77,9 @@ class MainActivity : Activity() {
         header.addView(text("✦ CHERNIKA AI", 24f).apply {
             typeface = Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val modelButton = button("Model")
+        header.addView(modelButton, LinearLayout.LayoutParams(dp(76), dp(45)))
+        modelButton.setOnClickListener { openModelManager() }
         val settings = button("Settings")
         header.addView(settings, LinearLayout.LayoutParams(dp(98), dp(45)))
         settings.setOnClickListener { openSettings() }
@@ -128,19 +140,23 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun welcome() = "Hi! I'm Chernika 🍇. This version can connect to " +
-        "a real AI through your private server. Open Settings to connect it. " +
-        "Until then, the offline mode is a limited preview, not a full AI model."
+    private fun welcome() = "Hi! I'm Chernika 🍇. Download my Qwen3 model from Model " +
+        "for real offline AI. ONLINE uses a private free-cloud gateway, while AUTO " +
+        "tries cloud first and switches to the local model if needed."
 
     private fun refreshStatus() {
         val ready = !prefs.getString("backend_url", "").isNullOrBlank() &&
             prefs.contains("encrypted_token")
+        val installed = hasOfflineModel()
         status.text = when {
-            mode == "OFFLINE" -> "OFFLINE · rules-based preview, not an LLM"
-            mode == "ONLINE" && ready -> "ONLINE · private AI server configured"
+            mode == "OFFLINE" && installed -> "OFFLINE · Qwen3 on-device model installed"
+            mode == "OFFLINE" -> "OFFLINE · tap Model to install Qwen3 (~586 MB)"
+            mode == "ONLINE" && ready -> "ONLINE · free AI gateway configured"
             mode == "ONLINE" -> "ONLINE · configure server in Settings"
-            ready -> "AUTO · online AI first, offline preview fallback"
-            else -> "AUTO · offline preview until cloud is connected"
+            ready && installed -> "AUTO · cloud first, Qwen3 offline fallback"
+            ready -> "AUTO · cloud first, offline preview fallback"
+            installed -> "AUTO · Qwen3 local AI ready; cloud optional"
+            else -> "AUTO · tap Model to enable genuine offline AI"
         }
     }
 
@@ -173,6 +189,38 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun hasOfflineModel() = modelFile.exists() &&
+        modelFile.length() in 500_000_000L..800_000_000L
+
+    private fun setBusy(value: Boolean) {
+        busy = value
+        send.isEnabled = !value
+        send.text = if (value) "..." else "Send"
+    }
+
+    private fun complete(reply: String) {
+        runOnUiThread {
+            setBusy(false)
+            showMessage("assistant", reply)
+        }
+    }
+
+    private fun offlineAnswer(message: String, prefix: String = "") {
+        if (!hasOfflineModel()) {
+            complete(prefix + localPreview(message)); return
+        }
+        offlineBrain.generate(message) { outcome ->
+            complete(prefix + outcome.fold(
+                onSuccess = { it.ifBlank { "The offline model returned no text." } },
+                onFailure = {
+                    "Offline inference failed on this device: " +
+                        (it.message ?: "Unknown error").take(160) +
+                        ". Try restarting, or switch to ONLINE."
+                }
+            ))
+        }
+    }
+
     private fun sendMessage() {
         if (busy) return
         val message = input.text.toString().trim()
@@ -181,43 +229,53 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Message limit: 2500 characters", Toast.LENGTH_LONG).show()
             return
         }
+        val modeForRequest = mode
         val prior = history()
         input.setText("")
         showMessage("user", message)
-        if (mode == "OFFLINE") {
-            showMessage("assistant", localPreview(message)); return
-        }
-        val url = prefs.getString("backend_url", "") ?: ""
-        val token = try { retrieveToken() } catch (_: Exception) { null }
-        if (url.isBlank() || token.isNullOrBlank()) {
-            showMessage("assistant", if (mode == "ONLINE")
-                "Open Settings and enter your private HTTPS server URL and " +
-                "Chernika access token. Never enter your OpenAI API key in the app."
-                else localPreview(message))
+        setBusy(true)
+
+        if (modeForRequest == "OFFLINE") {
+            offlineAnswer(message)
             return
         }
-        busy = true; send.isEnabled = false; send.text = "..."
+
+        val base = prefs.getString("backend_url", "") ?: ""
+        val token = try { retrieveToken() } catch (_: Exception) { null }
+        if (base.isBlank() || token.isNullOrBlank()) {
+            if (modeForRequest == "ONLINE") {
+                complete("Open Settings and enter your private HTTPS Worker address " +
+                    "and CHERNIKA_ACCESS_TOKEN (not the provider API key).")
+            } else {
+                offlineAnswer(message)
+            }
+            return
+        }
+
         Thread {
-            val reply = try {
+            val remote = try {
                 val h = JSONArray()
                 for (i in (prior.length() - 12).coerceAtLeast(0) until prior.length()) {
                     val item = prior.optJSONObject(i) ?: continue
-                    if (item.optString("role") in listOf("user", "assistant")) {
-                        h.put(item)
+                    if (item.optString("role") in listOf("user", "assistant")) h.put(item)
+                }
+                Result.success(callBackend(base, token, message, h))
+            } catch (e: Exception) {
+                Result.failure<String>(e)
+            }
+            remote.fold(
+                onSuccess = { complete(it) },
+                onFailure = {
+                    val cause = (it.message ?: "Network error").take(100)
+                    if (modeForRequest == "AUTO") {
+                        offlineAnswer(message, "Cloud unavailable (" + cause +
+                            "). Switching to offline:\n\n")
+                    } else {
+                        complete("Cloud AI error: " + cause +
+                            ". Check your server settings or internet connection.")
                     }
                 }
-                callBackend(url, token, message, h)
-            } catch (e: Exception) {
-                val error = (e.message ?: "Network error").take(120)
-                if (mode == "AUTO")
-                    "Cloud unavailable (" + error + ").\n\n" + localPreview(message)
-                else "Cloud AI error: " + error +
-                    ". Check your server URL, access token, and internet."
-            }
-            runOnUiThread {
-                busy = false; send.isEnabled = true; send.text = "Send"
-                showMessage("assistant", reply)
-            }
+            )
         }.start()
     }
 
@@ -280,6 +338,171 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openModelManager() {
+        val message = if (hasOfflineModel())
+            "Qwen3 0.6B is installed (~" + modelFile.length() / 1_000_000 +
+                " MB). OFFLINE can generate genuine text. CPU inference may be slow."
+        else
+            "Install the ~586 MB Qwen3 0.6B model once. It stays in private app " +
+                "storage. Afterwards OFFLINE works without internet.\n\n" +
+                "Download requires internet and ~700 MB free storage. " +
+                "Alternatively, import a .litertlm file from your Downloads."
+        AlertDialog.Builder(this).setTitle("Offline AI model")
+            .setMessage(message)
+            .setItems(arrayOf("Download Qwen3", "Import .litertlm file", "Delete model")) {
+                _, option ->
+                when (option) {
+                    0 -> downloadModel()
+                    1 -> {
+                        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                        }
+                        startActivityForResult(picker, modelRequestCode)
+                    }
+                    2 -> AlertDialog.Builder(this)
+                        .setMessage("Delete the model from this phone? Restart " +
+                            "Chernika afterwards to release memory.")
+                        .setPositiveButton("Delete") { _, _ ->
+                            if (modelFile.exists()) modelFile.delete()
+                            refreshStatus()
+                            Toast.makeText(this, "Model deleted. Restart the app.",
+                                Toast.LENGTH_LONG).show()
+                        }
+                        .setNegativeButton("Cancel", null).show()
+                }
+            }
+            .setNegativeButton("Close", null).show()
+    }
+
+    private fun downloadModel() {
+        if (hasOfflineModel()) {
+            Toast.makeText(this, "Qwen3 is already installed.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Download 586 MB?")
+            .setMessage("This uses internet data. Wi-Fi is recommended. " +
+                "The model is downloaded from the LiteRT community on Hugging Face.")
+            .setPositiveButton("Download") { _, _ ->
+                Thread {
+                    try {
+                        val capacity = StatFs(filesDir.absolutePath).availableBytes
+                        require(capacity >= 700_000_000L) {
+                            "Need at least 700 MB free internal storage."
+                        }
+                        val connection = URL(modelSource).openConnection() as HttpURLConnection
+                        connection.connectTimeout = 25_000
+                        connection.readTimeout = 50_000
+                        try {
+                            connection.instanceFollowRedirects = true
+                            require(connection.responseCode in 200..299) {
+                                "Download HTTP " + connection.responseCode
+                            }
+                            val total = connection.contentLengthLong
+                            require(total == -1L || total in 500_000_000L..800_000_000L) {
+                                "Unexpected model size; refused download."
+                            }
+                            connection.inputStream.use { stream ->
+                                installModel(stream, total)
+                            }
+                        } finally {
+                            connection.disconnect()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            status.text = "Model download failed: " +
+                                (error.message ?: "Network error").take(90)
+                        }
+                    }
+                }.start()
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun installModel(stream: java.io.InputStream, reportedBytes: Long) {
+        val temp = File(filesDir, "Qwen3-0.6B.litertlm.part")
+        var copied = 0L
+        var lastPercent = -1
+        try {
+            FileOutputStream(temp).use { output ->
+                val buffer = ByteArray(128 * 1024)
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    copied += read
+                    require(copied <= 800_000_000L) { "Model file exceeded safety size." }
+                    val percent = if (reportedBytes > 0) {
+                        (copied * 100 / reportedBytes).toInt().coerceIn(0, 100)
+                    } else -1
+                    if (percent != lastPercent && (percent % 3 == 0 || percent == 100)) {
+                        lastPercent = percent
+                        runOnUiThread {
+                            status.text = if (percent >= 0)
+                                "Downloading Qwen3: " + percent + "%"
+                            else "Importing model: " + copied / 1_000_000 + " MB"
+                        }
+                    }
+                }
+                output.fd.sync()
+            }
+            require(copied in 500_000_000L..800_000_000L) {
+                "Incomplete or invalid-sized model (" + copied + " bytes)."
+            }
+            if (reportedBytes > 0) require(copied == reportedBytes) {
+                "Incomplete model download; please retry."
+            }
+            require(!modelFile.exists() || modelFile.delete()) {
+                "Cannot replace the existing model; restart and retry."
+            }
+            require(temp.renameTo(modelFile)) {
+                "Could not move model to private storage."
+            }
+            runOnUiThread {
+                refreshStatus()
+                Toast.makeText(this, "Qwen3 installed! Select OFFLINE and chat.",
+                    Toast.LENGTH_LONG).show()
+            }
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
+    }
+
+    @Deprecated("Used for model file picker on Android")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != modelRequestCode || resultCode != RESULT_OK) return
+        val uri: Uri = data?.data ?: return
+        if (hasOfflineModel()) {
+            Toast.makeText(this, "Model already installed. Delete it first.",
+                Toast.LENGTH_LONG).show()
+            return
+        }
+        Thread {
+            try {
+                require(StatFs(filesDir.absolutePath).availableBytes >= 700_000_000L) {
+                    "Need at least 700 MB free storage."
+                }
+                val stream = contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Could not open selected file.")
+                stream.use { installModel(it, -1L) }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    status.text = "Model import failed: " +
+                        (e.message ?: "Unknown error").take(100)
+                }
+            }
+        }.start()
+    }
+
+    override fun onDestroy() {
+        if (::conversation.isInitialized) {
+            offlineBrain.close()
+        }
+        super.onDestroy()
+    }
+
     private fun openSettings() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -296,7 +519,7 @@ class MainActivity : Activity() {
             setText(prefs.getString("backend_url", ""))
         }
         panel.addView(endpoint)
-        val description = text("Chernika access token (NOT OpenAI API key):", 13f)
+        val description = text("Chernika access token (NOT provider API key):", 13f)
         description.setTextColor(Color.DKGRAY)
         panel.addView(description)
         val tokenInput = EditText(this).apply {
