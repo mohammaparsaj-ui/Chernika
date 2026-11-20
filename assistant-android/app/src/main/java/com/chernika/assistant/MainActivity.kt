@@ -259,7 +259,7 @@ class MainActivity : Activity() {
                 onFailure = {
                     "Offline model execution failed: " +
                         (it.message ?: "Unknown error").take(160) +
-                        "". Tap Model > Verify checksum; retry with lighter INT4 if verified."
+                        ". Tap Model > Verify checksum; retry with lighter INT4 if verified."
                 }
             ))
         }
