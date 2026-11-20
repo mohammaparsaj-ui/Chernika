@@ -339,40 +339,78 @@ class MainActivity : Activity() {
     }
 
     private fun openModelManager() {
-        val message = if (hasOfflineModel())
-            "Qwen3 0.6B is installed (~" + modelFile.length() / 1_000_000 +
-                " MB). OFFLINE can generate genuine text. CPU inference may be slow."
-        else
-            "Install the ~586 MB Qwen3 0.6B model once. It stays in private app " +
-                "storage. Afterwards OFFLINE works without internet.\n\n" +
-                "Download requires internet and ~700 MB free storage. " +
-                "Alternatively, import a .litertlm file from your Downloads."
-        AlertDialog.Builder(this).setTitle("Offline AI model")
-            .setMessage(message)
-            .setItems(arrayOf("Download Qwen3", "Import .litertlm file", "Delete model")) {
-                _, option ->
-                when (option) {
-                    0 -> downloadModel()
-                    1 -> {
-                        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "*/*"
-                        }
-                        startActivityForResult(picker, modelRequestCode)
-                    }
-                    2 -> AlertDialog.Builder(this)
-                        .setMessage("Delete the model from this phone? Restart " +
-                            "Chernika afterwards to release memory.")
-                        .setPositiveButton("Delete") { _, _ ->
-                            if (modelFile.exists()) modelFile.delete()
-                            refreshStatus()
-                            Toast.makeText(this, "Model deleted. Restart the app.",
-                                Toast.LENGTH_LONG).show()
-                        }
-                        .setNegativeButton("Cancel", null).show()
-                }
+        val installed = hasOfflineModel()
+        val message = text(
+            if (installed)
+                "Qwen3 0.6B is installed (~" + modelFile.length() / 1_000_000 +
+                    " MB). OFFLINE can generate genuine text. CPU inference may be slow."
+            else
+                "Qwen3 0.6B is not installed yet. Keep at least 700 MB free. " +
+                    "You can download it here or import the .litertlm file already " +
+                    "saved in your Downloads folder.",
+            14f
+        ).apply {
+            setTextColor(Color.DKGRAY)
+            setPadding(dp(18), dp(12), dp(18), dp(14))
+        }
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(4), dp(12), dp(8))
+        }
+        panel.addView(message)
+        val downloadButton = button(
+            if (installed) "Download Qwen3 again" else "Download Qwen3"
+        )
+        val importButton = button("Import .litertlm file")
+        val deleteButton = button("Delete installed model")
+        for (b in listOf(downloadButton, importButton, deleteButton)) {
+            val p = LinearLayout.LayoutParams(-1, dp(50))
+            p.setMargins(dp(8), dp(5), dp(8), dp(5))
+            panel.addView(b, p)
+        }
+        deleteButton.isEnabled = installed
+        deleteButton.alpha = if (installed) 1f else 0.45f
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Offline AI model")
+            .setView(panel)
+            .setNegativeButton("Close", null)
+            .create()
+        downloadButton.setOnClickListener {
+            dialog.dismiss()
+            downloadModel()
+        }
+        importButton.setOnClickListener {
+            dialog.dismiss()
+            val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+                putExtra(Intent.EXTRA_TITLE, "Select Qwen3-0.6B.litertlm")
             }
-            .setNegativeButton("Close", null).show()
+            try {
+                startActivityForResult(picker, modelRequestCode)
+            } catch (e: Exception) {
+                Toast.makeText(this,
+                    "Could not open Android file picker: " +
+                        (e.message ?: "Unknown error").take(100),
+                    Toast.LENGTH_LONG).show()
+            }
+        }
+        deleteButton.setOnClickListener {
+            dialog.dismiss()
+            AlertDialog.Builder(this)
+                .setTitle("Delete offline model?")
+                .setMessage("Delete Qwen3 from this phone? You can import it again later.")
+                .setPositiveButton("Delete") { _, _ ->
+                    if (modelFile.exists()) modelFile.delete()
+                    refreshStatus()
+                    Toast.makeText(this, "Model deleted.", Toast.LENGTH_LONG).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+        dialog.show()
     }
 
     private fun downloadModel() {
