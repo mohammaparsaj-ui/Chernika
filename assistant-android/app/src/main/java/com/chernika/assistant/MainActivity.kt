@@ -1,6 +1,8 @@
 package com.chernika.assistant
 
 import android.app.Activity
+import android.app.ActivityManager
+import java.security.MessageDigest
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
@@ -48,6 +50,11 @@ class MainActivity : Activity() {
     private val offlineBrain by lazy { OfflineBrain(applicationContext, modelFile) }
     private val modelRequestCode = 1451
     private val modelSource = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm"
+    private val smallModelSource = "https://huggingface.co/litert-community/Qwen3-0.6B-int4/resolve/main/qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm"
+    private val hashes = setOf(
+        "c5f39b4191926786c3e6668b62af4d6eb15248dfc7a5348252a9b406f33f2108",
+        "2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139"
+    )
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density + 0.5f).toInt()
     private fun shape(color: Int): GradientDrawable = GradientDrawable().apply {
@@ -149,13 +156,13 @@ class MainActivity : Activity() {
             prefs.contains("encrypted_token")
         val installed = hasOfflineModel()
         status.text = when {
-            mode == "OFFLINE" && installed -> "OFFLINE · Qwen3 on-device model installed"
+            mode == "OFFLINE" && installed -> "OFFLINE · Qwen3 file present (not inference-tested)"
             mode == "OFFLINE" -> "OFFLINE · tap Model to install Qwen3 (~586 MB)"
             mode == "ONLINE" && ready -> "ONLINE · free AI gateway configured"
             mode == "ONLINE" -> "ONLINE · configure server in Settings"
             ready && installed -> "AUTO · cloud first, Qwen3 offline fallback"
             ready -> "AUTO · cloud first, offline preview fallback"
-            installed -> "AUTO · Qwen3 local AI ready; cloud optional"
+            installed -> "AUTO · Qwen3 file present; cloud optional"
             else -> "AUTO · tap Model to enable genuine offline AI"
         }
     }
@@ -190,7 +197,44 @@ class MainActivity : Activity() {
     }
 
     private fun hasOfflineModel() = modelFile.exists() &&
-        modelFile.length() in 500_000_000L..800_000_000L
+        modelFile.length() in 300_000_000L..800_000_000L
+
+    private fun sha256(file: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(128 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                md.update(buffer, 0, count)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+    }
+
+    private fun verifyModel() {
+        if (!hasOfflineModel()) return
+        status.text = "Checking model checksum..."
+        Thread {
+            val hash = try { sha256(modelFile) } catch (e: Exception) { "ERROR: " + e.message }
+            val ok = hash in hashes
+            val memory = ActivityManager.MemoryInfo()
+            (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
+            val msg = if (ok)
+                "SHA-256 verified. Model file is intact.\\n" +
+                "RAM total: " + memory.totalMem / 1048576L + " MiB; available: " +
+                memory.availMem / 1048576L + " MiB.\\n" +
+                "If it still fails, try the lighter INT4 model."
+            else "Checksum mismatch. Re-download or import the correct model.\\n" +
+                "Observed SHA-256: " + hash
+            runOnUiThread {
+                refreshStatus()
+                AlertDialog.Builder(this).setTitle("Model diagnostics")
+                    .setMessage(msg.replace("\\n", "\n"))
+                    .setPositiveButton("OK", null).show()
+            }
+        }.start()
+    }
 
     private fun setBusy(value: Boolean) {
         busy = value
@@ -213,9 +257,9 @@ class MainActivity : Activity() {
             complete(prefix + outcome.fold(
                 onSuccess = { it.ifBlank { "The offline model returned no text." } },
                 onFailure = {
-                    "Offline inference failed on this device: " +
+                    "Offline model execution failed: " +
                         (it.message ?: "Unknown error").take(160) +
-                        ". Try restarting, or switch to ONLINE."
+                        "". Tap Model > Verify checksum; retry with lighter INT4 if verified."
                 }
             ))
         }
@@ -339,87 +383,83 @@ class MainActivity : Activity() {
     }
 
     private fun openModelManager() {
-        val installed = hasOfflineModel()
-        val message = text(
-            if (installed)
-                "Qwen3 0.6B is installed (~" + modelFile.length() / 1_000_000 +
-                    " MB). OFFLINE can generate genuine text. CPU inference may be slow."
+        val info = text(
+            if (hasOfflineModel())
+                "Qwen3 model found (" + modelFile.length() / 1_000_000 +
+                    " MB). Found does not mean working. Verify checksum first."
             else
-                "Qwen3 0.6B is not installed yet. Keep at least 700 MB free. " +
-                    "You can download it here or import the .litertlm file already " +
-                    "saved in your Downloads folder.",
+                "No local model installed. Try the lighter INT4 model for " +
+                    "devices with less available RAM.",
             14f
         ).apply {
             setTextColor(Color.DKGRAY)
-            setPadding(dp(18), dp(12), dp(18), dp(14))
+            setPadding(dp(14), dp(12), dp(14), dp(10))
         }
-
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(4), dp(12), dp(8))
+            setPadding(dp(10), dp(6), dp(10), dp(8))
         }
-        panel.addView(message)
-        val downloadButton = button(
-            if (installed) "Download Qwen3 again" else "Download Qwen3"
+        panel.addView(info)
+        val buttons = listOf(
+            button("Download lighter Qwen3 INT4 (347 MB)"),
+            button("Download original Qwen3 INT8 (614 MB)"),
+            button("Import .litertlm model"),
+            button("Verify model checksum + RAM"),
+            button("Delete installed model")
         )
-        val importButton = button("Import .litertlm file")
-        val deleteButton = button("Delete installed model")
-        for (b in listOf(downloadButton, importButton, deleteButton)) {
+        for (item in buttons) {
             val p = LinearLayout.LayoutParams(-1, dp(50))
-            p.setMargins(dp(8), dp(5), dp(8), dp(5))
-            panel.addView(b, p)
+            p.setMargins(dp(5), dp(4), dp(5), dp(4))
+            panel.addView(item, p)
         }
-        deleteButton.isEnabled = installed
-        deleteButton.alpha = if (installed) 1f else 0.45f
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Offline AI model")
+        buttons[3].isEnabled = hasOfflineModel()
+        buttons[4].isEnabled = hasOfflineModel()
+        val popup = AlertDialog.Builder(this)
+            .setTitle("Offline model diagnostics")
             .setView(panel)
             .setNegativeButton("Close", null)
             .create()
-        downloadButton.setOnClickListener {
-            dialog.dismiss()
-            downloadModel()
+        buttons[0].setOnClickListener {
+            popup.dismiss()
+            downloadModel(smallModelSource, 347)
         }
-        importButton.setOnClickListener {
-            dialog.dismiss()
+        buttons[1].setOnClickListener {
+            popup.dismiss()
+            downloadModel(modelSource, 614)
+        }
+        buttons[2].setOnClickListener {
+            popup.dismiss()
             val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "*/*"
-                putExtra(Intent.EXTRA_TITLE, "Select Qwen3-0.6B.litertlm")
             }
-            try {
-                startActivityForResult(picker, modelRequestCode)
-            } catch (e: Exception) {
-                Toast.makeText(this,
-                    "Could not open Android file picker: " +
-                        (e.message ?: "Unknown error").take(100),
-                    Toast.LENGTH_LONG).show()
-            }
+            startActivityForResult(picker, modelRequestCode)
         }
-        deleteButton.setOnClickListener {
-            dialog.dismiss()
+        buttons[3].setOnClickListener { popup.dismiss(); verifyModel() }
+        buttons[4].setOnClickListener {
+            popup.dismiss()
             AlertDialog.Builder(this)
-                .setTitle("Delete offline model?")
-                .setMessage("Delete Qwen3 from this phone? You can import it again later.")
+                .setTitle("Delete installed model?")
+                .setMessage("Keep your original file in Downloads. Restart the app " +
+                    "after deleting or replacing a model.")
                 .setPositiveButton("Delete") { _, _ ->
-                    if (modelFile.exists()) modelFile.delete()
+                    modelFile.delete()
                     refreshStatus()
-                    Toast.makeText(this, "Model deleted.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Deleted; restart Chernika.", Toast.LENGTH_LONG).show()
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
-        dialog.show()
+        popup.show()
     }
 
-    private fun downloadModel() {
+    private fun downloadModel(source: String, expectedMb: Int) {
         if (hasOfflineModel()) {
             Toast.makeText(this, "Qwen3 is already installed.", Toast.LENGTH_SHORT).show()
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("Download 586 MB?")
+            .setTitle("Download " + expectedMb + " MB?")
             .setMessage("This uses internet data. Wi-Fi is recommended. " +
                 "The model is downloaded from the LiteRT community on Hugging Face.")
             .setPositiveButton("Download") { _, _ ->
@@ -429,7 +469,7 @@ class MainActivity : Activity() {
                         require(capacity >= 700_000_000L) {
                             "Need at least 700 MB free internal storage."
                         }
-                        val connection = URL(modelSource).openConnection() as HttpURLConnection
+                        val connection = URL(source).openConnection() as HttpURLConnection
                         connection.connectTimeout = 25_000
                         connection.readTimeout = 50_000
                         try {
@@ -438,7 +478,7 @@ class MainActivity : Activity() {
                                 "Download HTTP " + connection.responseCode
                             }
                             val total = connection.contentLengthLong
-                            require(total == -1L || total in 500_000_000L..800_000_000L) {
+                            require(total == -1L || total in 300_000_000L..800_000_000L) {
                                 "Unexpected model size; refused download."
                             }
                             connection.inputStream.use { stream ->
@@ -485,11 +525,14 @@ class MainActivity : Activity() {
                 }
                 output.fd.sync()
             }
-            require(copied in 500_000_000L..800_000_000L) {
+            require(copied in 300_000_000L..800_000_000L) {
                 "Incomplete or invalid-sized model (" + copied + " bytes)."
             }
             if (reportedBytes > 0) require(copied == reportedBytes) {
                 "Incomplete model download; please retry."
+            }
+            require(sha256(temp) in hashes) {
+                "SHA-256 mismatch: model does not match official Qwen3 checksums."
             }
             require(!modelFile.exists() || modelFile.delete()) {
                 "Cannot replace the existing model; restart and retry."
@@ -499,7 +542,7 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 refreshStatus()
-                Toast.makeText(this, "Qwen3 installed! Select OFFLINE and chat.",
+                Toast.makeText(this, "Verified model installed. Restart Chernika before using OFFLINE.",
                     Toast.LENGTH_LONG).show()
             }
         } finally {
@@ -519,8 +562,8 @@ class MainActivity : Activity() {
         }
         Thread {
             try {
-                require(StatFs(filesDir.absolutePath).availableBytes >= 700_000_000L) {
-                    "Need at least 700 MB free storage."
+                require(StatFs(filesDir.absolutePath).availableBytes >= 400_000_000L) {
+                    "Need at least 400 MB free storage."
                 }
                 val stream = contentResolver.openInputStream(uri)
                     ?: throw IllegalStateException("Could not open selected file.")

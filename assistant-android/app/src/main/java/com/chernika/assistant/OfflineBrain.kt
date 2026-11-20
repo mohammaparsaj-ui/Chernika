@@ -7,6 +7,7 @@ import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -25,13 +26,14 @@ class OfflineBrain(
     fun generate(prompt: String, done: (Result<String>) -> Unit) {
         executor.execute {
             val result = try {
-                if (!modelFile.exists() || modelFile.length() < 500_000_000L) {
+                if (!modelFile.exists() || modelFile.length() < 300_000_000L) {
                     throw IllegalStateException("Qwen3 model is not installed.")
                 }
                 if (engine == null) {
                     val config = EngineConfig(
                         modelPath = modelFile.absolutePath,
-                        backend = Backend.CPU(),
+                        backend = Backend.CPU(threadCount = 2),
+                        maxNumTokens = 1024,
                         cacheDir = context.cacheDir.absolutePath
                     )
                     val candidate = Engine(config)
@@ -44,13 +46,24 @@ class OfflineBrain(
                                 "You are Chernika AI. Be helpful, accurate, " +
                                     "warm and concise. Adapt to the user's language. " +
                                     "You are an offline AI; you cannot browse the web."
-                            )
+                            ),
+                            samplerConfig = SamplerConfig(
+                                topK = 20, topP = 0.95, temperature = 0.6
+                            ),
+                            maxOutputToken = 192
                         )
                     )
                 }
                 val answer = checkNotNull(conversation).sendMessage(prompt).toString()
                 Result.success(answer)
             } catch (e: Exception) {
+                // Native failures can poison subsequent calls (task state 7).
+                val badConversation = conversation
+                conversation = null
+                try { badConversation?.close() } catch (_: Exception) {}
+                val badEngine = engine
+                engine = null
+                try { badEngine?.close() } catch (_: Exception) {}
                 Result.failure<String>(e)
             }
             done(result)
