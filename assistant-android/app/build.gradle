@@ -1,17 +1,14 @@
 plugins { id 'com.android.application' }
-
 android {
     namespace 'com.chernika.assistant'
     compileSdk 35
-
     defaultConfig {
         applicationId 'com.chernika.assistant'
         minSdk 30
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0-preview'
+        versionCode 2
+        versionName '0.2.0-cloud'
     }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
