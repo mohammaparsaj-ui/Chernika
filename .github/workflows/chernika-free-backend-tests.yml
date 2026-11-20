@@ -1,0 +1,23 @@
+name: Test Chernika free AI gateway
+
+on:
+  push:
+    branches: [feature/chernika-ai-android-v0]
+    paths:
+      - 'assistant-android/backend/**'
+      - '.github/workflows/chernika-free-backend-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test free backend with mocked provider
+        run: node --test assistant-android/backend/test-worker.mjs
